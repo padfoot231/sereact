@@ -1,3 +1,1 @@
-from .sereact_data_loader import SereactDataloader
-
-__all__ = ['SereactDataloader']
+from .build import build_loader

@@ -11,6 +11,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from omegaconf import DictConfig
+from typing import List, Union, Optional, Tuple, Dict
 
 from models.detr3d.helpers import ACTIVATION_DICT, NORM_DICT, WEIGHT_INIT_DICT
 from models.detr3d.pointnet2 import PointnetSAModuleVotes
@@ -47,17 +48,17 @@ class GenericMLP(nn.Module):
     def __init__(
         self,
         input_dim: int,
-        hidden_dims: list[int],
+        hidden_dims: List[int],
         output_dim: int,
-        norm_fn_name: str = None,
+        norm_fn_name: Optional[str] = None,
         activation: str = 'relu',
         use_conv: bool = False,
-        dropout: float | list[float] = None,
+        dropout: Optional[Union[float, List[float]]] = None,
         hidden_use_bias: bool = False,
         output_use_bias: bool = True,
         output_use_activation: bool = False,
         output_use_norm: bool = False,
-        weight_init_name: str = None,
+        weight_init_name: Optional[str] = None,
     ) -> None:
         super().__init__()
 
@@ -309,8 +310,8 @@ class BoxProcessor:
         self,
         center_offset: torch.Tensor,
         query_xyz: torch.Tensor,
-        point_cloud_dims: list[torch.Tensor],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+        point_cloud_dims: List[torch.Tensor],
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Compute the predicted center of the bounding box.
 
@@ -329,7 +330,7 @@ class BoxProcessor:
         return center_normalized, center_unnormalized
 
     def compute_predicted_size(
-        self, size_unnormalized: torch.Tensor, point_cloud_dims: list[torch.Tensor]
+        self, size_unnormalized: torch.Tensor, point_cloud_dims: List[torch.Tensor]
     ) -> torch.Tensor:
         """
         Compute the predicted size of the bounding box.
@@ -517,8 +518,8 @@ class Model3DDETR(nn.Module):
         )
 
     def get_query_embedding(
-        self, encoder_xyz: torch.Tensor, point_cloud_dims: list[torch.Tensor]
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+        self, encoder_xyz: torch.Tensor, point_cloud_dims: List[torch.Tensor]
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Generate query embeddings by sampling points from the encoder output and applying positional encoding.
 
@@ -552,7 +553,7 @@ class Model3DDETR(nn.Module):
 
         return query_xyz, query_embeddings
 
-    def _break_up_pc(self, pc: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor | None]:
+    def _break_up_pc(self, pc: torch.Tensor) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Break up the point cloud into coordinates and features.
             pc (torch.Tensor): A point cloud tensor of shape (N, M, C) where N is the batch size,
                        M is the number of points, and C is the number of channels. The first
@@ -573,7 +574,7 @@ class Model3DDETR(nn.Module):
 
     def run_encoder(
         self, point_clouds: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Runs the encoder on the given point clouds.
             point_clouds (torch.Tensor): The input point clouds with shape (batch_size, num_points, num_features).
 
@@ -617,7 +618,7 @@ class Model3DDETR(nn.Module):
     def get_box_prediction(
         self,
         query_xyz: torch.Tensor,
-        point_cloud_dims: list[torch.Tensor],
+        point_cloud_dims: List[torch.Tensor],
         box_features: torch.Tensor,
     ) -> dict:
         """
@@ -688,12 +689,12 @@ class Model3DDETR(nn.Module):
                 'center_normalized': center_normalized.contiguous(),
                 'center_unnormalized': center_unnormalized,
                 'size_normalized': size_normalized[i],
-                'angle_logits': angle_logits[i],
                 'angle_residual': angle_residual[i],
                 'angle_residual_normalized': angle_residual_normalized[i],
                 'angle_contiguous': angle_contiguous,
                 'box_corners': box_corners,
             }
+            # 'angle_logits': angle_logits[i],
 
             outputs.append(box_prediction)
 
@@ -708,11 +709,11 @@ class Model3DDETR(nn.Module):
 
     def forward(
         self,
-        inputs_list: list[dict[str, torch.Tensor]],
+        inputs_list: List[Dict[str, torch.Tensor]],
         point_cloud_dims_min: torch.Tensor,
         point_cloud_dims_max: torch.Tensor,
         encoder_only: bool = False,
-    ) -> list[dict[str, torch.Tensor]] | torch.Tensor:
+    ) -> Union[List[Dict[str, torch.Tensor]], torch.Tensor]:
         """Forward pass of the 3D DETR model.
 
         Args:
@@ -787,7 +788,7 @@ class Model3DDETR(nn.Module):
 
 
 # Function to build pre_encoder
-def build_preencoder(cfg_model: DictConfig) -> PointnetSAModuleVotes:
+def build_preencoder(config) -> PointnetSAModuleVotes:
     """
     Builds the preencoder configuration for the model.
 
@@ -799,11 +800,11 @@ def build_preencoder(cfg_model: DictConfig) -> PointnetSAModuleVotes:
     Returns:
         PointnetSAModuleVotes: The preencoder module.
     """
-    mlp_dimensions = [3 * int(cfg_model.encoder.use_color), 64, 128, cfg_model.encoder.dim]
+    mlp_dimensions = [3 * int(config.model.encoder.use_color), 64, 128, config.model.encoder.dim]
     preencoder = PointnetSAModuleVotes(
         radius=0.2,
         nsample=64,
-        npoint=cfg_model.encoder.preencoder_npoints,
+        npoint=config.model.encoder.preencoder_npoints,
         mlp=mlp_dimensions,
         normalize_xyz=True,
     )
@@ -811,7 +812,7 @@ def build_preencoder(cfg_model: DictConfig) -> PointnetSAModuleVotes:
 
 
 # Function to build encoder
-def build_encoder(cfg_model: DictConfig) -> TransformerEncoder:
+def build_encoder(config) -> TransformerEncoder:
     """
     Builds and returns an encoder based on the specified arguments.
     Args:
@@ -829,21 +830,21 @@ def build_encoder(cfg_model: DictConfig) -> TransformerEncoder:
         ValueError: If the encoder_type is not recognized.
     """
     encoder_layer = TransformerEncoderLayer(
-        d_model=cfg_model.encoder.dim,
-        nhead=cfg_model.encoder.nheads,
-        dim_feedforward=cfg_model.encoder.ffn_dim,
-        dropout=cfg_model.encoder.dropout,
-        activation=cfg_model.encoder.activation,
+        d_model=config.model.encoder.dim,
+        nhead=config.model.encoder.nheads,
+        dim_feedforward=config.model.encoder.ffn_dim,
+        dropout=config.model.encoder.dropout,
+        activation=config.model.encoder.activation, #check for string
     )
     encoder = TransformerEncoder(
-        encoder_layer=encoder_layer, num_layers=cfg_model.encoder.num_layers
+        encoder_layer=encoder_layer, num_layers=config.model.encoder.num_layers
     )
 
     return encoder
 
 
 # Function to build the decoder
-def build_decoder(cfg_model: DictConfig) -> TransformerDecoder:
+def build_decoder(config) -> TransformerDecoder:
     """
     Builds a Transformer decoder using the provided arguments.
     Args:
@@ -857,14 +858,14 @@ def build_decoder(cfg_model: DictConfig) -> TransformerDecoder:
         TransformerDecoder: A Transformer decoder instance configured with the specified parameters.
     """
     decoder_layer = TransformerDecoderLayer(
-        d_model=cfg_model.decoder.dim,
-        nhead=cfg_model.decoder.nhead,
-        dim_feedforward=cfg_model.decoder.ffn_dim,
-        dropout=cfg_model.decoder.dropout,
+        d_model=config.model.decoder.dim,
+        nhead=config.model.decoder.nhead,
+        dim_feedforward=config.model.decoder.ffn_dim,
+        dropout=config.model.decoder.dropout,
     )
     decoder = TransformerDecoder(
         decoder_layer=decoder_layer,
-        num_layers=cfg_model.decoder.num_layers,
+        num_layers=config.model.decoder.num_layers,
         return_intermediate=True,
     )
 
@@ -872,7 +873,7 @@ def build_decoder(cfg_model: DictConfig) -> TransformerDecoder:
 
 
 # Function to build the 3D DETR model
-def build_3ddetr_model(cfg_model: DictConfig) -> Model3DDETR:
+def build_3ddetr_model(config) -> Model3DDETR:
     """
     Build the 3DDETR model and its output processor.
     Args:
@@ -885,19 +886,19 @@ def build_3ddetr_model(cfg_model: DictConfig) -> Model3DDETR:
     Returns:
             - model (Model3DDETR): The constructed 3DDETR model.
     """
-    pre_encoder = build_preencoder(cfg_model)
-    encoder = build_encoder(cfg_model)
-    decoder = build_decoder(cfg_model)
+    pre_encoder = build_preencoder(config)
+    encoder = build_encoder(config)
+    decoder = build_decoder(config)
     model = Model3DDETR(
         pre_encoder=pre_encoder,
         encoder=encoder,
         decoder=decoder,
-        encoder_dim=cfg_model.encoder.dim,
-        decoder_dim=cfg_model.decoder.dim,
-        position_embedding=cfg_model.position_embedding,
-        mlp_dropout=cfg_model.mlp_dropout,
-        num_queries=cfg_model.num_queries,
-        num_angular_bins=cfg_model.num_angular_bins,
+        encoder_dim=config.model.encoder.dim,
+        decoder_dim=config.model.decoder.dim,
+        position_embedding=config.model.position_embedding, #check for string
+        mlp_dropout=config.model.mlp_dropout,
+        num_queries=config.model.num_queries,
+        num_angular_bins=config.model.num_angular_bins,
     )
     # Not sure if we need the output_processor, so simply comment this out now
     # output_processor = BoxProcessor(config=config)

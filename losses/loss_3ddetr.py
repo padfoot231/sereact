@@ -10,6 +10,7 @@ import torch
 import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
+from typing import Tuple
 
 # Some util functions that needs to be imported as well
 from scipy.optimize import linear_sum_assignment
@@ -367,7 +368,7 @@ class SetCriterion(nn.Module):
 
     def single_output_forward(
         self, outputs: dict, targets: torch.Tensor, epoch: int
-    ) -> tuple[torch.Tensor, dict, dict]:
+    ) -> Tuple[torch.Tensor, dict, dict]:
         # Compute the Generalized Intersection over Union (GIoU) between predicted and ground truth boxes
         # NOTE: Here we have assumed that the boxes are not rotated.
         #       We also set needs_grad to False.
@@ -425,7 +426,7 @@ class SetCriterion(nn.Module):
 
     def forward(
         self, outputs: dict, targets: torch.Tensor, epoch: Optional[int] = 0
-    ) -> tuple[torch.Tensor, dict, dict]:
+    ) -> Tuple[torch.Tensor, dict, dict]:
         # Because the outputs has the batch dimension, add that in targets
         if targets.dim() == 3:
             targets = targets.unsqueeze(0)
@@ -467,26 +468,26 @@ class SetCriterion(nn.Module):
 
 
 class LossFunction(nn.Module):
-    def __init__(self, cfg_loss: dict) -> None:
+    def __init__(self, config) -> None:
         super().__init__()
 
         # Define the matcher loss
         matcher_loss = MatcherLoss(
-            cost_giou=cfg_loss.matcher_costs.giou,
-            cost_box_corners=cfg_loss.matcher_costs.cost_box_corners,
-            cost_l1=cfg_loss.matcher_costs.l1,
+            cost_giou=config.loss.matcher_costs.giou,
+            cost_box_corners=config.loss.matcher_costs.cost_box_corners,
+            cost_l1=config.loss.matcher_costs.l1,
         )
         # Define the loss weight dictionary
         loss_weight_dict = {
-            'loss_giou_weight': cfg_loss.weights.giou,
-            'loss_box_corners_weight': cfg_loss.weights.box_corners,
-            'loss_size_weight': cfg_loss.weights.size,
-            'loss_size_reg_weight': cfg_loss.weights.size_reg,
+            'loss_giou_weight': config.loss.weights.giou,
+            'loss_box_corners_weight': config.loss.weights.box_corners,
+            'loss_size_weight': config.loss.weights.size,
+            'loss_size_reg_weight': config.loss.weights.size_reg,
         }
         # Define the criterion
         self.criterion = SetCriterion(matcher_loss=matcher_loss, loss_weight_dict=loss_weight_dict)
 
     def forward(
         self, outputs: dict, targets: torch.Tensor, epoch: Optional[int] = 0
-    ) -> tuple[torch.Tensor, dict, dict]:
+    ) -> Tuple[torch.Tensor, dict, dict]:
         return self.criterion(outputs, targets, epoch)

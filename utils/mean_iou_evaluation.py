@@ -4,6 +4,7 @@ Utility file that contains the IoU evaluator class.
 
 import numpy as np
 from shapely.geometry import MultiPoint
+from typing import List, Optional
 
 
 class IoUEvaluator:
@@ -18,7 +19,7 @@ class IoUEvaluator:
         total_boxes (int): Total number of ground truth boxes evaluated.
     """
 
-    def __init__(self, iou_thresholds: list[float] = None) -> None:
+    def __init__(self, iou_thresholds: Optional[List[float]] = None) -> None:
         if iou_thresholds is None:
             iou_thresholds = [0.25, 0.5]
         """
@@ -83,7 +84,7 @@ class IoUEvaluator:
 
         return intersection / union
 
-    def update(self, pred_boxes: list[np.ndarray], gt_boxes: list[np.ndarray]) -> None:
+    def update(self, pred_boxes: List[np.ndarray], gt_boxes: List[np.ndarray]) -> None:
         """
         Update the evaluator with a batch of predicted and ground truth boxes.
 

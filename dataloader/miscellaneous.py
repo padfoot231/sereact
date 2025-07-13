@@ -2,11 +2,10 @@
 Python file that contains some miscellaneous functions that for augmentation and model training.
 """
 
-from typing import List
+from typing import List, Union
 
 import numpy as np
 import torch
-from typing import Tuple, List, Union
 
 
 def worker_init_fn(worker_id: int) -> None:
@@ -156,7 +155,6 @@ def collate_fn(batch: List[dict]) -> dict:
         'point_cloud_dims_max': pcd_max,
         'rgb_tensor': rgb_tensors,
     }
-# data: Union[dict, torch.Tensor], device: torch.device) -> Union[dict, torch.Tensor]
 
 def move_to_device(data: Union[dict, torch.Tensor], device: torch.device) -> Union[dict, torch.Tensor]:
     """
