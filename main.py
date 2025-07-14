@@ -46,7 +46,7 @@ from utils.model_utils import (
     load_checkpoint,
     NativeScalerWithGradNormCount
 )
-# from utils.low_precision_conversion import convert_model_to_low_precision
+from utils.low_precision_conversion import convert_model_to_low_precision
 
 # Initialize Wandb for experiment tracking
 wandb.init(project="sereact project", entity='padfoot')
@@ -136,10 +136,21 @@ def main(config: Any) -> None:
     iou_evaluator = IoUEvaluator()
 
     max_miou = 0.0
+    if config.model.export_model:
+        # breakpoint()
+        logger.info('Start of conversion to low precision formats')
+        try:
+            convert_model_to_low_precision(config, model_without_ddp, torch.device('cuda'))
+            logger.info('Model conversion successful')
+        except ImportError:
+            logger.warning('Low precision conversion module not available. Skipping model export.')
+        except Exception as e:
+            logger.error(f'Model conversion failed: {e}')
+        return
 
     if config.model.resume:
         max_miou = load_checkpoint(config, model_without_ddp, optimizer, scheduler, loss_scaler, logger)
-        miou, _ = validate(config, loss_module, epoch, iou_evaluator, data_loader_val, model)
+        miou, _ = validate(config, loss_module, 0, iou_evaluator, data_loader_val, model)
         logger.info(f"Mean iou of the network on the {len(dataset_val)} test images: {miou:.4f}")
         if config.eval_mode:
             return
@@ -149,7 +160,7 @@ def main(config: Any) -> None:
         miou, _ = validate(config, loss_module, 0, iou_evaluator, data_loader_val, model)
         logger.info(f"Mean iou of the network on the {len(dataset_val)} test images: {miou:.4f}")
 
-
+        # Model export to low precision formats
     if config.model.training:
         logger.info("Start training")
         start_time = time.time()
@@ -185,18 +196,6 @@ def main(config: Any) -> None:
         total_time = time.time() - start_time
         total_time_str = str(datetime.timedelta(seconds=int(total_time)))
         logger.info('Training time {}'.format(total_time_str))
-
-    # Model export to low precision formats
-    # if config.model.export_model:
-    #     logger.info('Start of conversion to low precision formats')
-    #     try:
-    #         convert_model_to_low_precision(config, model_without_ddp, torch.device('cuda'))
-    #         logger.info('Model conversion successful')
-    #     except ImportError:
-    #         logger.warning('Low precision conversion module not available. Skipping model export.')
-    #     except Exception as e:
-    #         logger.error(f'Model conversion failed: {e}')
-
 
 def train_one_epoch(
     config: Any,

@@ -22,5 +22,6 @@ python -m torch.distributed.launch \
 --cfg config/base_train.yaml \
 --output /home-local2/akath.extra.nobkp/sereact \
 --data-path /home-local2/akath.extra.nobkp/dl_challenge \
+--resume /home-local2/akath.extra.nobkp/sereact/3DDETR/123/ckpt_epoch_best_new_resume.pth \
 --batch-size 1 
 # --pretrained /home-local2/akath.extra.nobkp/scannet_ep1080.pth

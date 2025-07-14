@@ -38,7 +38,7 @@ model:
   num_queries: 256
   num_angular_bins: 1
   pretrained_weights_path: "/home-local2/akath.extra.nobkp/scannet_ep1080.pth"
-  export_model: false
+  export_model: True
 
 loss:
   matcher_costs:
