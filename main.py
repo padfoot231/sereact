@@ -228,7 +228,6 @@ def train_one_epoch(
         gt_bboxes = [obj.cuda() for obj in batch['bbox3d_tensor']]
         pcd_dims_min = [obj.cuda() for obj in batch['point_cloud_dims_min']]
         pcd_dims_max = [obj.cuda() for obj in batch['point_cloud_dims_max']]
-        breakpoint() 
         torch.autograd.set_detect_anomaly(True)
 
         try:
