@@ -5,7 +5,11 @@
 # Written by Ze Liu
 # --------------------------------------------------------'
 
+from __future__ import annotations
+
 import os
+import argparse
+from typing import Any
 import yaml
 from yacs.config import CfgNode as CN
 
@@ -171,7 +175,13 @@ _C.unit_test = False
 _C.local_rank = 0
 
 
-def _update_config_from_file(config, cfg_file):
+def _update_config_from_file(config: CN, cfg_file: str) -> None:
+    """Update config from YAML file.
+
+    Args:
+        config: Configuration node to update
+        cfg_file: Path to YAML configuration file
+    """
     config.defrost()
     with open(cfg_file, 'r') as f:
         yaml_cfg = yaml.load(f, Loader=yaml.FullLoader)
@@ -186,7 +196,13 @@ def _update_config_from_file(config, cfg_file):
     config.freeze()
 
 
-def update_config(config, args):
+def update_config(config: CN, args: argparse.Namespace) -> None:
+    """Update configuration with command line arguments.
+
+    Args:
+        config: Configuration node to update
+        args: Parsed command line arguments
+    """
     _update_config_from_file(config, args.cfg)
 
     config.defrost()
@@ -194,7 +210,6 @@ def update_config(config, args):
         config.merge_from_list(args.opts)
     # lst = ['MODEL.SWIN.RADIUS_CUTS', 16, 'MODEL.SWIN.AZIMUTH_CUTS', 64]
     # config.merge_from_list(lst)
-
 
     # merge from specific arguments
     if args.batch_size:
@@ -235,8 +250,15 @@ def update_config(config, args):
     config.freeze()
 
 
-def get_config(args):
-    """Get a yacs CfgNode object with default values."""
+def get_config(args: argparse.Namespace) -> CN:
+    """Get a yacs CfgNode object with default values.
+
+    Args:
+        args: Parsed command line arguments
+
+    Returns:
+        CN: Configuration node with updated values
+    """
     # Return a clone so that the defaults will not be altered
     # This is for the "local variable" use pattern
     config = _C.clone()

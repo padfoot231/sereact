@@ -5,10 +5,13 @@
 # Written by Ze Liu
 # --------------------------------------------------------
 
+from __future__ import annotations
+
+from typing import Any
 from torch import optim as optim
 import torch
 
-def build_optimizer(config, model: torch.nn.Module) -> torch.optim.AdamW:
+def build_optimizer(config: Any, model: torch.nn.Module) -> torch.optim.AdamW:
     """
     Build an AdamW optimizer with optional weight decay filtering for biases and parameters with shape length 1.
 

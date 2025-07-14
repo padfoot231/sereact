@@ -5,29 +5,32 @@
 # Written by Ze Liu
 # --------------------------------------------------------
 
+from __future__ import annotations
+
 import os
 import time
 import json
 import random
 import argparse
 import datetime
+from typing import Dict, List, Tuple, Any, Optional
 import numpy as np
 import wandb
 import pickle as pkl
 from PIL import Image
 
-
 import torch
 import torch.backends.cudnn as cudnn
 import torch.distributed as dist
 import torchvision.transforms as T
+from torch.utils.data import DataLoader
 from losses.loss_3ddetr import LossFunction
 from models.detr3d.model_3ddetr import build_3ddetr_model
 # from utils.low_precision_conversion import convert_model_to_low_precision
 from utils.mean_iou_evaluation import IoUEvaluator
 from torch import optim as optim
 import torch.nn.functional as F
-from matplotlib import pyplot as plt 
+from matplotlib import pyplot as plt
 from torchvision import transforms
 import seaborn as sns
 from optimizer import build_optimizer
@@ -39,21 +42,27 @@ from config import get_config
 from dataloader import build_loader
 
 from logger import create_logger
-from utils_help import save_checkpoint, NativeScalerWithGradNormCount, auto_resume_helper, \
+from utils_help import save_checkpoint, load_checkpoint, NativeScalerWithGradNormCount, auto_resume_helper, \
     reduce_tensor
 
-transform = T.ToPILImage()
+# Fix variable naming conflicts
+transform_to_pil = T.ToPILImage()
 # res_bi = transforms.Resize(size=(640, 768), interpolation=Image.BILINEAR)
 # res_n = transforms.Resize(size=(640, 768), interpolation=Image.NEAREST)
 
-T = transforms.ToTensor()
-pil = transforms.ToPILImage()
+to_tensor = transforms.ToTensor()
+to_pil = transforms.ToPILImage()
 
-data_dic = {}
+data_dic: Dict[str, Any] = {}
 
 wandb.init(project="sereact project", entity='padfoot')
 
-def parse_option():
+def parse_option() -> Tuple[argparse.Namespace, Any]:
+    """Parse command line arguments and return args and config.
+
+    Returns:
+        Tuple[argparse.Namespace, Any]: Parsed arguments and configuration object
+    """
     parser = argparse.ArgumentParser('Swin Transformer training and evaluation script', add_help=False)
     parser.add_argument('--cfg', type=str, required=True, metavar="FILE", help='path to config file', )
     parser.add_argument(
@@ -92,7 +101,12 @@ def parse_option():
     return args, config
 
 
-def main(config):
+def main(config: Any) -> None:
+    """Main training function.
+
+    Args:
+        config: Configuration object containing training parameters
+    """
     base_lr = config.train.base_lr
     dataset_train, dataset_val, data_loader_train, data_loader_val = build_loader(config)
     
@@ -186,7 +200,17 @@ def main(config):
         logger.info('Training time {}'.format(total_time_str))
 
 
-def train_one_epoch(config, model, loss_module, iou_evaluator, data_loader, optimizer, epoch, lr_scheduler, loss_scaler):
+def train_one_epoch(
+    config: Any,
+    model: torch.nn.Module,
+    loss_module: LossFunction,
+    iou_evaluator: IoUEvaluator,
+    data_loader: DataLoader,
+    optimizer: torch.optim.Optimizer,
+    epoch: int,
+    lr_scheduler: Any,
+    loss_scaler: NativeScalerWithGradNormCount
+) -> Dict[str, float]:
     model.train()
     optimizer.zero_grad()
     num_steps = len(data_loader)
@@ -301,7 +325,14 @@ def train_one_epoch(config, model, loss_module, iou_evaluator, data_loader, opti
 
 
 @torch.no_grad()
-def validate(config, loss_module, epoch, iou_evaluator, data_loader, model):
+def validate(
+    config: Any,
+    loss_module: LossFunction,
+    epoch: int,
+    iou_evaluator: IoUEvaluator,
+    data_loader: DataLoader,
+    model: torch.nn.Module
+) -> Tuple[float, float]:
     
     model.eval()
 

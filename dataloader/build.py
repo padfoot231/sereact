@@ -5,11 +5,15 @@
 # Written by Ze Liu
 # --------------------------------------------------------
 
+from __future__ import annotations
+
 import os
 from re import L
+from typing import Any, Tuple
 import torch
 import numpy as np
 import torch.distributed as dist
+from torch.utils.data import Dataset, DataLoader
 from torchvision import datasets, transforms
 from .samplers import SubsetRandomSampler
 from .miscellaneous import collate_fn, worker_init_fn
@@ -41,12 +45,20 @@ from .augmentations import SereactAugmentation
 #     from timm.data.transforms import _pil_interp
 
 
-def build_loader(config):
+def build_loader(config: Any) -> Tuple[Dataset, Dataset, DataLoader, DataLoader]:
+    """Build data loaders for training and validation.
+
+    Args:
+        config: Configuration object containing data parameters
+
+    Returns:
+        Tuple[Dataset, Dataset, DataLoader, DataLoader]: Train dataset, test dataset, train loader, test loader
+    """
     config.defrost()
     dataset_train = build_dataset(is_train=True, config=config)
     config.freeze()
     print(f"local rank {config.local_rank} / global rank {dist.get_rank()} successfully build train dataset")
-    
+
     dataset_test= build_dataset(is_train=False, config=config)
     print(f"local rank {config.local_rank} / global rank {dist.get_rank()} successfully build val dataset")
 
@@ -98,7 +110,19 @@ def build_loader(config):
     return dataset_train, dataset_test, data_loader_train, data_loader_test
 
 
-def build_dataset(is_train, config):
+def build_dataset(is_train: bool, config: Any) -> Dataset:
+    """Build dataset for training or testing.
+
+    Args:
+        is_train: Whether to build training dataset (True) or test dataset (False)
+        config: Configuration object containing dataset parameters
+
+    Returns:
+        Dataset: The constructed dataset
+
+    Raises:
+        NotImplementedError: If dataset type is not supported
+    """
     if config.data.dataset == 'Sereact_dataset':
         # transform = SereactAugmentation() if is_train else None
         transform = None
