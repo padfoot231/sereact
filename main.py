@@ -25,6 +25,11 @@ import torch.distributed as dist
 from torch.utils.data import DataLoader
 from timm.utils import AverageMeter
 
+# Initialize cuDNN for stability
+torch.backends.cudnn.enabled = True
+torch.backends.cudnn.benchmark = False  # Set to False for deterministic behavior
+torch.backends.cudnn.deterministic = True
+
 # Local imports - Core components
 from config import get_config
 from dataloader import build_loader
@@ -87,8 +92,21 @@ def parse_option() -> Tuple[argparse.Namespace, Any]:
 
 def main(config: Any) -> None:
     """Main training function that orchestrates model training, evaluation, and checkpointing."""
+    # Initialize GPU and cuDNN for stability
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        # Warm up cuDNN with a small operation
+        try:
+            dummy_input = torch.randn(1, 3, 32, 32).cuda()
+            dummy_output = torch.nn.functional.relu(dummy_input)
+            del dummy_input, dummy_output
+            torch.cuda.empty_cache()
+            logger.info("cuDNN initialized successfully")
+        except Exception as e:
+            logger.warning(f"cuDNN initialization warning: {e}")
+
     _, dataset_val, data_loader_train, data_loader_val = build_loader(config)
-    
+
     model = build_3ddetr_model(config)
 
     logger.info(str(model))
@@ -210,16 +228,31 @@ def train_one_epoch(
         gt_bboxes = [obj.cuda() for obj in batch['bbox3d_tensor']]
         pcd_dims_min = [obj.cuda() for obj in batch['point_cloud_dims_min']]
         pcd_dims_max = [obj.cuda() for obj in batch['point_cloud_dims_max']]
-
+        breakpoint() 
         torch.autograd.set_detect_anomaly(True)
 
-        # Forward pass
-        outputs = model(
-            inputs,
-            inputs_rgb,
-            point_cloud_dims_min=pcd_dims_min,
-            point_cloud_dims_max=pcd_dims_max,
-        )
+        try:
+            # Forward pass
+            outputs = model(
+                inputs,
+                inputs_rgb,
+                point_cloud_dims_min=pcd_dims_min,
+                point_cloud_dims_max=pcd_dims_max,
+            )
+        except RuntimeError as e:
+            if "cuDNN error" in str(e):
+                logger.error(f"cuDNN error encountered: {e}")
+                logger.info("Clearing GPU cache and retrying...")
+                torch.cuda.empty_cache()
+                # Retry once
+                outputs = model(
+                    inputs,
+                    inputs_rgb,
+                    point_cloud_dims_min=pcd_dims_min,
+                    point_cloud_dims_max=pcd_dims_max,
+                )
+            else:
+                raise e
 
         output = outputs[0]
         gt_bbox = gt_bboxes[0]

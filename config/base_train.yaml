@@ -2,7 +2,7 @@ seed: 40
 
 train:
   start_epoch: 0
-  max_epoch: 200
+  max_epoch: 500
   base_lr: 0.0001 # Was 0.0005
   warm_lr: 5e-6 # Increasing it to 5e-6 from 1e-6
   warm_lr_epochs: 9

@@ -3,20 +3,18 @@ Utility file to convert the model into lower precision model format for deployme
 """
 
 import os
-
+from typing import Any
 import tensorrt as trt
 import torch
-from omegaconf import DictConfig
-
 
 def convert_model_to_low_precision(
-    cfg: DictConfig, model: torch.nn.Module, DEVICE: torch.device
+    config: Any, model: torch.nn.Module, DEVICE: torch.device
 ) -> None:
     """
     Convert the trained model to low-precision formats (ONNX and TensorRT).
 
     Args:
-        cfg (DictConfig): Configuration parameters.
+        config (DictConfig): Configuration parameters.
         model (torch.nn.Module): The trained model to convert.
         DEVICE (torch.device): The device the model is currently on.
     """
@@ -25,23 +23,26 @@ def convert_model_to_low_precision(
         model.eval()
 
         # Create output directory if it doesn't exist
-        output_dir = cfg.output_folder_path
+        output_dir = config.output_folder_path
         os.makedirs(output_dir, exist_ok=True)
 
         # Export model to ONNX
         onnx_path = os.path.join(output_dir, 'model.onnx')
         print(f'Exporting model to ONNX format at {onnx_path}')
 
-        # Simply a placeholder input for the model
-        dummy_input = torch.randn(1, 3, 224, 224).to(DEVICE)
+        # Simply a placeholder input for the model, 331090 is the max number of points in the dataset
+        dummy_input = [torch.randn([331090, 3]).to(DEVICE)]
+        dummy_input_image = [torch.randn([3, 565, 586]).to(DEVICE)]
+        pcd_dims_min = [torch.tensor([0.0, 0.0, 0.0]).to(DEVICE)]
+        pcd_dims_max = [torch.tensor([1.0, 1.0, 1.0]).to(DEVICE)]
         torch.onnx.export(
             model,
-            dummy_input,
+            (dummy_input, dummy_input_image, pcd_dims_min, pcd_dims_max),
             onnx_path,
             verbose=True,
-            input_names=['input'],
+            input_names=['input', 'input_image', 'pcd_dims_min', 'pcd_dims_max'],
             output_names=['output'],
-            opset_version=13,
+            opset_version=16,
         )
 
         # Convert ONNX to TensorRT
