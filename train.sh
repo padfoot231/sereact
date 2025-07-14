@@ -6,7 +6,7 @@ export WANDB_MODE="disabled"
 
 
 python -m torch.distributed.launch \
---nproc_per_node 3 \
+--nproc_per_node 1 \
 --master_port 12346  main.py \
 --cfg config/base_train.yaml \
 --output /home-local2/akath.extra.nobkp/sereact \

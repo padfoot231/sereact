@@ -41,6 +41,7 @@ from utils.model_utils import (
     load_checkpoint,
     NativeScalerWithGradNormCount
 )
+# from utils.low_precision_conversion import convert_model_to_low_precision
 
 # Initialize Wandb for experiment tracking
 wandb.init(project="sereact project", entity='padfoot')
@@ -77,7 +78,7 @@ def parse_option() -> Tuple[argparse.Namespace, Any]:
     # distributed training
     parser.add_argument("--local_rank", type=int, required=True, help='local rank for DistributedDataParallel')
 
-    args, unparsed = parser.parse_known_args()
+    args, _ = parser.parse_known_args()
 
     config = get_config(args)
 
@@ -86,8 +87,7 @@ def parse_option() -> Tuple[argparse.Namespace, Any]:
 
 def main(config: Any) -> None:
     """Main training function that orchestrates model training, evaluation, and checkpointing."""
-    base_lr = config.train.base_lr
-    dataset_train, dataset_val, data_loader_train, data_loader_val = build_loader(config)
+    _, dataset_val, data_loader_train, data_loader_val = build_loader(config)
     
     model = build_3ddetr_model(config)
 
@@ -121,14 +121,14 @@ def main(config: Any) -> None:
 
     if config.model.resume:
         max_miou = load_checkpoint(config, model_without_ddp, optimizer, scheduler, loss_scaler, logger)
-        miou, loss = validate(config, loss_module, epoch, iou_evaluator, data_loader_val, model)
+        miou, _ = validate(config, loss_module, epoch, iou_evaluator, data_loader_val, model)
         logger.info(f"Mean iou of the network on the {len(dataset_val)} test images: {miou:.4f}")
         if config.eval_mode:
             return
         
     if config.model.pretrained and (not config.model.resume):
         load_pretrained(config, model_without_ddp, logger)
-        miou, loss = validate(config, loss_module, 0, iou_evaluator, data_loader_val, model)
+        miou, _ = validate(config, loss_module, 0, iou_evaluator, data_loader_val, model)
         logger.info(f"Mean iou of the network on the {len(dataset_val)} test images: {miou:.4f}")
 
 
@@ -164,11 +164,20 @@ def main(config: Any) -> None:
             test_overfit_on_single_sample(config, model, loss_module, iou_evaluator, data_loader_train, optimizer, epoch,scheduler,
                             loss_scaler)
             
-            logger.info(f'Unit test count: {count:.4f}%')
-
         total_time = time.time() - start_time
         total_time_str = str(datetime.timedelta(seconds=int(total_time)))
         logger.info('Training time {}'.format(total_time_str))
+
+    # Model export to low precision formats
+    # if config.model.export_model:
+    #     logger.info('Start of conversion to low precision formats')
+    #     try:
+    #         convert_model_to_low_precision(config, model_without_ddp, torch.device('cuda'))
+    #         logger.info('Model conversion successful')
+    #     except ImportError:
+    #         logger.warning('Low precision conversion module not available. Skipping model export.')
+    #     except Exception as e:
+    #         logger.error(f'Model conversion failed: {e}')
 
 
 def train_one_epoch(
@@ -191,10 +200,6 @@ def train_one_epoch(
     loss_meter = AverageMeter()
     norm_meter = AverageMeter()
     scaler_meter = AverageMeter()
-    miou_meter = AverageMeter()
-    iter_num = 0
-    max_iterations = config.train.max_epoch * num_steps
-
     start = time.time()
     end = time.time()
 
@@ -304,9 +309,6 @@ def validate(
 
     end = time.time()
     iou_evaluator.reset()
-    total_loss = 0.0
-    num_batches = len(data_loader)
-    time_per_batch = []
 
     logger.info('Starting validation...')
 
