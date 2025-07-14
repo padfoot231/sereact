@@ -1,68 +1,51 @@
-# --------------------------------------------------------
-# Swin Transformer
-# Copyright (c) 2021 Microsoft
-# Licensed under The MIT License [see LICENSE for details]
-# Written by Ze Liu
-# --------------------------------------------------------
+"""
+Sereact 3D Object Detection Training Script
+
+Main training pipeline for 3DETR-based 3D object detection with RGB-PointCloud fusion.
+Supports distributed training, multi-component losses, and comprehensive evaluation metrics.
+"""
 
 from __future__ import annotations
 
+# Standard library imports
 import os
 import time
 import json
 import random
-import argparse
 import datetime
-from typing import Dict, List, Tuple, Any, Optional
+import argparse
+from typing import Dict, Any, Tuple
+
+# Third-party imports
 import numpy as np
 import wandb
-import pickle as pkl
-from PIL import Image
-
 import torch
 import torch.backends.cudnn as cudnn
 import torch.distributed as dist
-import torchvision.transforms as T
 from torch.utils.data import DataLoader
-from losses.loss_3ddetr import LossFunction
-from models.detr3d.model_3ddetr import build_3ddetr_model
-# from utils.low_precision_conversion import convert_model_to_low_precision
-from utils.mean_iou_evaluation import IoUEvaluator
-from torch import optim as optim
-import torch.nn.functional as F
-from matplotlib import pyplot as plt
-from torchvision import transforms
-import seaborn as sns
-from optimizer import build_optimizer
-from utils.mean_iou_evaluation import IoUEvaluator
+from timm.utils import AverageMeter
 
-from timm.utils import accuracy, AverageMeter
-
+# Local imports - Core components
 from config import get_config
 from dataloader import build_loader
-
 from logger import create_logger
-from utils_help import save_checkpoint, load_checkpoint, NativeScalerWithGradNormCount, auto_resume_helper, \
-    reduce_tensor
+from optimizer import build_optimizer
 
-# Fix variable naming conflicts
-transform_to_pil = T.ToPILImage()
-# res_bi = transforms.Resize(size=(640, 768), interpolation=Image.BILINEAR)
-# res_n = transforms.Resize(size=(640, 768), interpolation=Image.NEAREST)
+# Local imports - Model and training
+from models.detr3d.model_3ddetr import build_3ddetr_model
+from losses.loss_3ddetr import LossFunction
+from utils.mean_iou_evaluation import IoUEvaluator
+from utils.model_utils import (
+    load_pretrained,
+    save_checkpoint,
+    load_checkpoint,
+    NativeScalerWithGradNormCount
+)
 
-to_tensor = transforms.ToTensor()
-to_pil = transforms.ToPILImage()
-
-data_dic: Dict[str, Any] = {}
-
+# Initialize Wandb for experiment tracking
 wandb.init(project="sereact project", entity='padfoot')
-
 def parse_option() -> Tuple[argparse.Namespace, Any]:
-    """Parse command line arguments and return args and config.
-
-    Returns:
-        Tuple[argparse.Namespace, Any]: Parsed arguments and configuration object
-    """
+    """Parse command line arguments and return args and config."""
     parser = argparse.ArgumentParser('Swin Transformer training and evaluation script', add_help=False)
     parser.add_argument('--cfg', type=str, required=True, metavar="FILE", help='path to config file', )
     parser.add_argument(
@@ -102,11 +85,7 @@ def parse_option() -> Tuple[argparse.Namespace, Any]:
 
 
 def main(config: Any) -> None:
-    """Main training function.
-
-    Args:
-        config: Configuration object containing training parameters
-    """
+    """Main training function that orchestrates model training, evaluation, and checkpointing."""
     base_lr = config.train.base_lr
     dataset_train, dataset_val, data_loader_train, data_loader_val = build_loader(config)
     
@@ -123,7 +102,7 @@ def main(config: Any) -> None:
     model_without_ddp = model
 
     optimizer = build_optimizer(config, model)
-    model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[config.local_rank], find_unused_parameters=True, broadcast_buffers=False)
+    model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[config.local_rank], find_unused_parameters=False, broadcast_buffers=False)
     loss_scaler = NativeScalerWithGradNormCount()
 
     if config.train.lr_scheduler == 'cosine':
@@ -137,22 +116,8 @@ def main(config: Any) -> None:
 
     loss_module = LossFunction(config)
     iou_evaluator = IoUEvaluator()
-    # breakpoint()
 
     max_miou = 0.0
-
-    if config.train.auto_resume:
-        resume_file = auto_resume_helper(config.output)
-        if resume_file:
-            if config.model.resume:
-                logger.warning(f"auto-resume changing resume file from {config.model.resume} to {resume_file}")
-            config.defrost()
-            config.model.resume = resume_file
-            config.freeze()
-            logger.info(f'auto resuming from {resume_file}')
-        else:
-            logger.info(f'no checkpoint found in {config.output}, ignoring auto resume')
-
 
     if config.model.resume:
         max_miou = load_checkpoint(config, model_without_ddp, optimizer, scheduler, loss_scaler, logger)
@@ -160,6 +125,12 @@ def main(config: Any) -> None:
         logger.info(f"Mean iou of the network on the {len(dataset_val)} test images: {miou:.4f}")
         if config.eval_mode:
             return
+        
+    if config.model.pretrained and (not config.model.resume):
+        load_pretrained(config, model_without_ddp, logger)
+        miou, loss = validate(config, loss_module, 0, iou_evaluator, data_loader_val, model)
+        logger.info(f"Mean iou of the network on the {len(dataset_val)} test images: {miou:.4f}")
+
 
     if config.model.training:
         logger.info("Start training")
@@ -190,7 +161,7 @@ def main(config: Any) -> None:
         for epoch in range(config.train.start_epoch, config.train.unit_test_epoch):
             data_loader_train.sampler.set_epoch(epoch)
 
-            count = train_one_epoch(config, model, loss_module, iou_evaluator, data_loader_train, optimizer, epoch,scheduler,
+            test_overfit_on_single_sample(config, model, loss_module, iou_evaluator, data_loader_train, optimizer, epoch,scheduler,
                             loss_scaler)
             
             logger.info(f'Unit test count: {count:.4f}%')
@@ -211,8 +182,10 @@ def train_one_epoch(
     lr_scheduler: Any,
     loss_scaler: NativeScalerWithGradNormCount
 ) -> Dict[str, float]:
+    """Execute one training epoch with forward/backward pass and metrics tracking."""
     model.train()
     optimizer.zero_grad()
+
     num_steps = len(data_loader)
     batch_time = AverageMeter()
     loss_meter = AverageMeter()
@@ -220,55 +193,49 @@ def train_one_epoch(
     scaler_meter = AverageMeter()
     miou_meter = AverageMeter()
     iter_num = 0
-    max_iterations = config.train.max_epoch*num_steps
+    max_iterations = config.train.max_epoch * num_steps
+
     start = time.time()
     end = time.time()
-    # breakpoint()
+
     for batch_idx, batch in enumerate(data_loader):
-        # breakpoint()
-        # Move input data to the specified device
-        # breakpoint()
+        # Move input data to GPU
         inputs = [obj.cuda() for obj in batch['pcd_tensor']]
         inputs_rgb = [obj.cuda() for obj in batch['rgb_tensor']]
         gt_bboxes = [obj.cuda() for obj in batch['bbox3d_tensor']]
         pcd_dims_min = [obj.cuda() for obj in batch['point_cloud_dims_min']]
         pcd_dims_max = [obj.cuda() for obj in batch['point_cloud_dims_max']]
-        # Enable anomaly detection for debugging
+
         torch.autograd.set_detect_anomaly(True)
-        # breakpoint()
+
+        # Forward pass
         outputs = model(
             inputs,
-            inputs_rgb, 
+            inputs_rgb,
             point_cloud_dims_min=pcd_dims_min,
             point_cloud_dims_max=pcd_dims_max,
         )
-        # breakpoint()
+
         output = outputs[0]
         gt_bbox = gt_bboxes[0]
-        # breakpoint()
-        # Get predictions
+
+        # Compute losses
         pred_boxes = output['outputs']
         pred_boxes_aux = output['auxiliary_outputs']
-        # Compute loss
         loss, loss_dict, assignments = loss_module(pred_boxes, gt_bbox)
+
         loss_aux = 0
         for aux in pred_boxes_aux:
             loss_aux_cls, loss_dict_aux, assignments_aux = loss_module(aux, gt_bbox)
             loss_aux += loss_aux_cls
-        total_loss = loss + 0.01*loss_aux
-        # this attribute is added by timm on one optimizer (adahessian)
+
+        total_loss = loss + 0.01 * loss_aux
+
         is_second_order = hasattr(optimizer, 'is_second_order') and optimizer.is_second_order
         grad_norm = loss_scaler(total_loss, optimizer, clip_grad=config.train.clip_grad,
                                 parameters=model.parameters(), create_graph=is_second_order,
                                 update_grad=(batch_idx + 1) % config.train.accumulation_steps == 0)
-        # for name, param in model.named_parameters():
-        #     if param.grad is None:
-        #         print(f"⚠️ Unused parameter: {name}")
 
-        # breakpoint()
-        # for name, param in model.named_parameters():
-        #     if param.grad is None:
-        #         print(f"⚠️ Unused parameter: {name}")
         if (batch_idx + 1) % config.train.accumulation_steps == 0:
             optimizer.zero_grad()
             lr_scheduler.step()
@@ -282,11 +249,7 @@ def train_one_epoch(
                 )
             )
 
-        # Update IoU evaluator
-        # breakpoint()
         iou_evaluator.update(predicted_bboxes_matched, gt_bboxes_matched)
-
-        # breakpoint()
         torch.cuda.synchronize()
 
         if grad_norm is not None:  # loss_scaler return None if not update
@@ -316,7 +279,6 @@ def train_one_epoch(
                     'train_miou': metric,
                 }
             )
-        # breakpoint()
     metrics = iou_evaluator.compute_metrics()
 
             
@@ -333,23 +295,21 @@ def validate(
     data_loader: DataLoader,
     model: torch.nn.Module
 ) -> Tuple[float, float]:
-    
+    """Validate model on validation dataset and return loss and IoU metrics."""
     model.eval()
 
     batch_time = AverageMeter()
     loss_meter = AverageMeter()
     miou_meter = AverageMeter()
-    # metric_perclass = MulticlassJaccardIndex(num_classes=config.MODEL.NUM_CLASSES, average=None).cuda()
-    # metric = MultilabelJaccardIndex(num_classes=config.MODEL.NUM_CLASSES).cuda()
-    # evaluator.reset()
+
     end = time.time()
     iou_evaluator.reset()
-    # metrics = {'val_iou': {}, 'val_loss': 0.0}
     total_loss = 0.0
     num_batches = len(data_loader)
     time_per_batch = []
 
     logger.info('Starting validation...')
+
     for _, batch_data in enumerate(data_loader):
         start_time = time.time()
 
@@ -402,76 +362,83 @@ def validate(
     )
     return metrics, loss_meter.avg
 
-def test_overfit_on_single_sample(config, model, loss_module, iou_evaluator, data_loader, optimizer, epoch, lr_scheduler, loss_scaler):
+def test_overfit_on_single_sample(
+    config: Any,
+    model: torch.nn.Module,
+    loss_module: LossFunction,
+    iou_evaluator: IoUEvaluator,
+    data_loader: DataLoader,
+    optimizer: torch.optim.Optimizer,
+    epoch: int,
+    lr_scheduler: Any,
+    loss_scaler: NativeScalerWithGradNormCount
+) -> Dict[str, float]:
+    """Test model's ability to overfit on a single sample for debugging."""
     model.train()
     optimizer.zero_grad()
+    
     num_steps = len(data_loader)
     batch_time = AverageMeter()
     loss_meter = AverageMeter()
     norm_meter = AverageMeter()
     scaler_meter = AverageMeter()
-    miou_meter = AverageMeter()
-    iter_num = 0
-    max_iterations = config.train.max_epoch*num_steps
+    
+    count = 0  # Initialize counter
     start = time.time()
     end = time.time()
+    
     for batch_idx, single_batch in enumerate(data_loader):
-
-       # Move input data to the specified device
+        # Move input data to GPU (single sample only)
         inputs = [single_batch['pcd_tensor'][0].cuda()]
+        inputs_rgb = [single_batch['rgb_tensor'][0].cuda()]  # Fixed: take first element
         gt_bboxes = [single_batch['bbox3d_tensor'][0].cuda()]
         pcd_dims_min = [single_batch['point_cloud_dims_min'][0].cuda()]
         pcd_dims_max = [single_batch['point_cloud_dims_max'][0].cuda()]
         
-        # Enable anomaly detection for debugging
         torch.autograd.set_detect_anomaly(True)
+        
+        # Fixed: correct input order
         outputs = model(
-            inputs,
+            inputs,      # Point clouds first
+            inputs_rgb,  # RGB second
             point_cloud_dims_min=pcd_dims_min,
             point_cloud_dims_max=pcd_dims_max,
         )
         
         output = outputs[0]
         gt_bbox = gt_bboxes[0]
-        # breakpoint()
-
-        # Get predictions
+        
         pred_boxes = output['outputs']
-
-        # Compute loss
         loss, loss_dict, assignments = loss_module(pred_boxes, gt_bbox)
-        # this attribute is added by timm on one optimizer (adahessian)
+        
         is_second_order = hasattr(optimizer, 'is_second_order') and optimizer.is_second_order
         grad_norm = loss_scaler(loss, optimizer, clip_grad=config.train.clip_grad,
                                 parameters=model.parameters(), create_graph=is_second_order,
                                 update_grad=(batch_idx + 1) % config.train.accumulation_steps == 0)
+        
         if (batch_idx + 1) % config.train.accumulation_steps == 0:
             optimizer.zero_grad()
             lr_scheduler.step()
 
         loss_scale_value = loss_scaler.state_dict()["scale"]
-
+        loss_meter.update(loss.item())  # Fixed: add missing loss update
         
-
         predicted_bboxes_matched, gt_bboxes_matched = (
-                get_predicted_and_gt_boxes_from_assignments(
-                    pred_boxes=pred_boxes, assignments=assignments, gt_bbox=gt_bbox
-                )
+            get_predicted_and_gt_boxes_from_assignments(
+                pred_boxes=pred_boxes, assignments=assignments, gt_bbox=gt_bbox
             )
-
-        # Update IoU evaluator
+        )
+        
         iou_evaluator.update(predicted_bboxes_matched, gt_bboxes_matched)
-
         metrics = iou_evaluator.compute_metrics()
-
+        
         if metrics['mean_iou'] > 0.25:
             print(f'Mean IoU value above 0.25: {metrics["mean_iou"]}')
-            # self.visualize_box_distributions(predicted_bboxes_matched, gt_bboxes_matched)
             count += 1
-
+        
         torch.cuda.synchronize()
-
-        if grad_norm is not None:  # loss_scaler return None if not update
+        
+        if grad_norm is not None:
             norm_meter.update(grad_norm)
         scaler_meter.update(loss_scale_value)
         batch_time.update(time.time() - end)
@@ -482,16 +449,20 @@ def test_overfit_on_single_sample(config, model, loss_module, iou_evaluator, dat
             memory_used = torch.cuda.max_memory_allocated() / (1024.0 * 1024.0)
             etas = batch_time.avg * (num_steps - batch_idx)
             logger.info(
-                f'Train: [{epoch}/{config.train.max_epoch}][{batch_idx}/{num_steps}]\t'
+                f'Overfit Test: [{epoch}][{batch_idx}/{num_steps}]\t'
                 f'eta {datetime.timedelta(seconds=int(etas))} lr {lr:.6f}\t'
                 f'time {batch_time.val:.4f} ({batch_time.avg:.4f})\t'
                 f'loss {loss_meter.val:.4f} ({loss_meter.avg:.4f})\t'
                 f'grad_norm {norm_meter.val:.4f} ({norm_meter.avg:.4f})\t'
                 f'loss_scale {scaler_meter.val:.4f} ({scaler_meter.avg:.4f})\t'
                 f'mem {memory_used:.0f}MB')
-    epoch_time = time.time() - start
-    logger.info(f"EPOCH {epoch} training takes {datetime.timedelta(seconds=int(epoch_time))}")
-    return count
+    
+    # Return metrics
+    return {
+        'loss': loss_meter.avg,
+        'mean_iou': metrics['mean_iou'],
+        'samples_above_threshold': count
+    }
 
 
 def get_predicted_and_gt_boxes_from_assignments(
@@ -556,22 +527,6 @@ if __name__ == '__main__':
     np.random.seed(seed)
     random.seed(seed)
     cudnn.benchmark = True
-    # linear scale the learning rate according to total batch size, may not be optimal
-    # if args.batch_size != 24 and args.batch_size % 6 == 0:
-    # linear_scaled_lr = config.TRAIN.BASE_LR * config.DATA.BATCH_SIZE * dist.get_world_size() / 512.0 ## change it based on the scheduler performance
-    # linear_scaled_warmup_lr = config.TRAIN.WARMUP_LR * config.DATA.BATCH_SIZE * dist.get_world_size() / 512.0
-    # linear_scaled_min_lr = config.TRAIN.MIN_LR * config.DATA.BATCH_SIZE * dist.get_world_size() / 512.0
-    # # gradient accumulation also need to scale the learning rate
-    # if config.TRAIN.ACCUMULATION_STEPS > 1:
-    #     linear_scaled_lr = config.TRAIN.BASE_LR * config.TRAIN.ACCUMULATION_STEPS
-    #     linear_scaled_warmup_lr = linear_scaled_warmup_lr * config.TRAIN.ACCUMULATION_STEPS
-    #     linear_scaled_min_lr = linear_scaled_min_lr * config.TRAIN.ACCUMULATION_STEPS
-    
-    # config.defrost()
-    # config.TRAIN.BASE_LR = config.TRAIN.BASE_LR
-    # config.TRAIN.WARMUP_LR = linear_scaled_warmup_lr
-    # config.TRAIN.MIN_LR = linear_scaled_min_lr
-    # config.freeze()
 
     os.makedirs(config.output, exist_ok=True)
     logger = create_logger(output_dir=config.output, dist_rank=dist.get_rank(), name=f"{config.model.name}")

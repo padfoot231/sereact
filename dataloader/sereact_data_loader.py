@@ -1,7 +1,6 @@
 import os
 from typing import Dict, Tuple
 import numpy as np
-import numpy.typing as npt
 import torch
 from PIL import Image
 from torch.utils.data import Dataset

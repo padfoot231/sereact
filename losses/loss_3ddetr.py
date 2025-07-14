@@ -11,6 +11,7 @@ import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
 from typing import Tuple
+import numpy as np
 
 # Some util functions that needs to be imported as well
 from scipy.optimize import linear_sum_assignment
@@ -151,103 +152,111 @@ class SetCriterion(nn.Module):
             'loss_giou': self.loss_giou,
             'loss_size': self.loss_size,
             'loss_size_reg': self.loss_size_regularization,
+            'loss_angle': self.loss_angle,
         }
 
-    """
     def loss_angle(
         self,
-        outputs,
-        targets,
-        assignments
-    ):
+        outputs: dict,
+        gt_bbox_corners: torch.Tensor,
+        assignments: dict
+    ) -> dict:
+        """Compute angle loss for 3D bounding box orientation.
+
+        Args:
+            outputs: Model outputs containing angle predictions
+            gt_bbox_corners: Ground truth bounding box corners (B, N_gt, 8, 3)
+            assignments: Assignment dictionary from matcher
+
+        Returns:
+            dict: Dictionary containing angle loss
+        """
+        # Check if angle predictions are available in outputs
+        if "angle_logits" not in outputs or "angle_residual" not in outputs:
+            # Return zero loss if angle predictions are not available
+            device = gt_bbox_corners.device
+            return {
+                "loss_angle_cls": torch.tensor(0.0, device=device),
+                "loss_angle_reg": torch.tensor(0.0, device=device)
+            }
+
         # Extract angle logits and residuals from the outputs
-        angle_logits = outputs["angle_logits"]
-        angle_residual = outputs["angle_residual_normalized"]
+        angle_logits = outputs["angle_logits"]  # (B, N_q, num_angle_bins)
+        angle_residual = outputs["angle_residual"]  # (B, N_q, num_angle_bins)
 
-        # Check if there are any ground truth boxes
-        if targets["num_boxes_replica"] > 0:
-            # Extract ground truth angle labels and residuals
-            gt_angle_label = targets["gt_angle_class_label"]
-            gt_angle_residual = targets["gt_angle_residual_label"]
-            # Normalize the ground truth angle residuals
-            gt_angle_residual_normalized = gt_angle_residual / (np.pi / 12)
-            # Gather the ground truth angle labels based on the assignments
-            gt_angle_label = torch.gather(
-                gt_angle_label, 1, assignments["per_prop_gt_inds"]
-            )
-            # Compute the cross-entropy loss for angle classification
+        batch_size, num_queries = angle_logits.shape[:2]
+        num_gt = gt_bbox_corners.shape[1]
+
+        if num_gt > 0:
+            # Compute ground truth angles from bounding box corners
+            # Extract the front face center and back face center to determine orientation
+            gt_front_center = gt_bbox_corners[:, :, :4, :].mean(dim=2)  # (B, N_gt, 3)
+            gt_back_center = gt_bbox_corners[:, :, 4:, :].mean(dim=2)   # (B, N_gt, 3)
+
+            # Compute the direction vector (front to back)
+            gt_direction = gt_back_center - gt_front_center  # (B, N_gt, 3)
+
+            # Compute the yaw angle (rotation around Z-axis)
+            gt_angles = torch.atan2(gt_direction[:, :, 1], gt_direction[:, :, 0])  # (B, N_gt)
+
+            # Discretize angles into bins (e.g., 24 bins for 15-degree intervals)
+            num_angle_bins = angle_logits.shape[-1]
+            angle_bin_size = 2 * np.pi / num_angle_bins
+
+            # Convert angles to bin indices
+            gt_angle_bins = ((gt_angles + np.pi) / angle_bin_size).long()  # (B, N_gt)
+            gt_angle_bins = torch.clamp(gt_angle_bins, 0, num_angle_bins - 1)
+
+            # Compute residuals within bins
+            gt_angle_residuals = (gt_angles + np.pi) % angle_bin_size - angle_bin_size / 2  # (B, N_gt)
+            gt_angle_residuals = gt_angle_residuals / angle_bin_size  # Normalize to [-0.5, 0.5]
+
+            # Get matched ground truth angles
+            matched_gt_angle_bins = torch.gather(
+                gt_angle_bins, 1, assignments["per_prop_gt_inds"]
+            )  # (B, N_q)
+
+            matched_gt_angle_residuals = torch.gather(
+                gt_angle_residuals, 1, assignments["per_prop_gt_inds"]
+            )  # (B, N_q)
+
+            # Compute classification loss
             angle_cls_loss = F.cross_entropy(
-                angle_logits.transpose(2, 1), gt_angle_label, reduction="none"
-            )
-            # Mask the classification loss with the proposal matched mask and sum it
-            angle_cls_loss = (
-                angle_cls_loss * assignments["proposal_matched_mask"]
-            ).sum()
+                angle_logits.view(-1, num_angle_bins),
+                matched_gt_angle_bins.view(-1),
+                reduction="none"
+            ).view(batch_size, num_queries)
 
-            # Gather the normalized ground truth angle residuals based on the assignments
-            gt_angle_residual_normalized = torch.gather(
-                gt_angle_residual_normalized, 1, assignments["per_prop_gt_inds"]
-            )
-            # Create a one-hot encoding of the ground truth angle labels
-            gt_angle_label_one_hot = torch.zeros_like(
-                angle_residual, dtype=torch.float32
-            )
-            gt_angle_label_one_hot.scatter_(2, gt_angle_label.unsqueeze(-1), 1)
+            # Apply matching mask and normalize
+            angle_cls_loss = (angle_cls_loss * assignments["proposal_matched_mask"]).sum()
+            angle_cls_loss = angle_cls_loss / max(assignments["proposal_matched_mask"].sum(), 1)
 
-            # Extract the angle residuals for the ground truth classes
-            angle_residual_for_gt_class = torch.sum(
-                angle_residual * gt_angle_label_one_hot, -1
-            )
-            # Compute the Huber loss for angle regression
-            angle_reg_loss = huber_loss(
-                angle_residual_for_gt_class - gt_angle_residual_normalized, delta=1.0
-            )
-            # Mask the regression loss with the proposal matched mask and sum it
-            angle_reg_loss = (
-                angle_reg_loss * assignments["proposal_matched_mask"]
-            ).sum()
+            # Compute regression loss for the predicted bin
+            # Extract residuals for the ground truth bins
+            gt_bin_one_hot = F.one_hot(matched_gt_angle_bins, num_angle_bins).float()  # (B, N_q, num_bins)
+            predicted_residuals = (angle_residual * gt_bin_one_hot).sum(dim=-1)  # (B, N_q)
 
-            # Normalize the classification and regression losses by the number of boxes
-            angle_cls_loss /= targets["num_boxes"]
-            angle_reg_loss /= targets["num_boxes"]
+            # Compute smooth L1 loss for residuals
+            angle_reg_loss = F.smooth_l1_loss(
+                predicted_residuals, matched_gt_angle_residuals, reduction="none"
+            )
+
+            # Apply matching mask and normalize
+            angle_reg_loss = (angle_reg_loss * assignments["proposal_matched_mask"]).sum()
+            angle_reg_loss = angle_reg_loss / max(assignments["proposal_matched_mask"].sum(), 1)
+
         else:
-            # If there are no ground truth boxes, set the losses to zero
-            angle_cls_loss = torch.zeros(1, device=angle_logits.device).squeeze()
-            angle_reg_loss = torch.zeros(1, device=angle_logits.device).squeeze()
+            # No ground truth boxes
+            device = angle_logits.device
+            angle_cls_loss = torch.tensor(0.0, device=device)
+            angle_reg_loss = torch.tensor(0.0, device=device)
 
-        # Return the angle classification and regression losses
-        return {"loss_angle_cls": angle_cls_loss, "loss_angle_reg": angle_reg_loss}
+        return {
+            "loss_angle_cls": angle_cls_loss,
+            "loss_angle_reg": angle_reg_loss
+        }
 
-    def loss_center(
-        self,
-        outputs,
-        targets,
-        assignments
-    ):
-        # Get the distance of the centers from the outputs
-        center_dist = outputs["center_dist"]
 
-        # Check if there are any ground truth boxes
-        if targets["num_boxes_replica"] > 0:
-            # Select appropriate distances by using proposal to ground truth matching
-            center_loss = torch.gather(
-                center_dist, 2, assignments["per_prop_gt_inds"].unsqueeze(-1)
-            ).squeeze(-1)
-            # Zero-out non-matched proposals
-            center_loss = center_loss * assignments["proposal_matched_mask"]
-            # Sum the center loss
-            center_loss = center_loss.sum()
-
-            # Normalize the center loss by the number of boxes
-            if targets["num_boxes"] > 0:
-                center_loss /= targets["num_boxes"]
-        else:
-            # If there are no ground truth boxes, set the center loss to zero
-            center_loss = torch.zeros(1, device=center_dist.device).squeeze()
-
-        # Return the center loss
-        return {"loss_center": center_loss}
-    """
 
     def loss_size(self, outputs: dict, gt_bbox_corners: torch.Tensor, assignments: dict) -> dict:
         # Get the ground truth bbox sizes
@@ -483,6 +492,8 @@ class LossFunction(nn.Module):
             'loss_box_corners_weight': config.loss.weights.box_corners,
             'loss_size_weight': config.loss.weights.size,
             'loss_size_reg_weight': config.loss.weights.size_reg,
+            'loss_angle_cls_weight': config.loss.weights.angle_cls,
+            'loss_angle_reg_weight': config.loss.weights.angle_reg,
         }
         # Define the criterion
         self.criterion = SetCriterion(matcher_loss=matcher_loss, loss_weight_dict=loss_weight_dict)

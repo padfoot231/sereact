@@ -36,8 +36,8 @@ model:
   position_embedding: fourier
   mlp_dropout: 0.3
   num_queries: 256
-  num_angular_bins: 12
-  pretrained_weights_path: "/home/s.bhat/Coding/Pre_trained_Weights/3detr/scannet_ep1080.pth"
+  num_angular_bins: 1
+  pretrained_weights_path: "/home-local2/akath.extra.nobkp/scannet_ep1080.pth"
   export_model: false
 
 loss:

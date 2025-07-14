@@ -61,6 +61,7 @@ _C.model.name = '3DDETR.yaml'
 # Pretrained weight from checkpoint, could be imagenet22k pretrained weight
 # could be overwritten by command line argument
 _C.model.pretrained = None
+# '/home-local2/akath.extra.nobkp/scannet_ep1080.pth'
 # '/home-local2/akath.extra.nobkp/swin_tiny_patch4_window7_224.pth'
 # '/home-local2/akath.extra.nobkp/swin_tiny_patch4_window7_224.pth'
 # 
@@ -123,10 +124,6 @@ _C.train.unit_test_epoch = 100
 # _C.TRAIN.WARMUP_LR = 5e-7``
 # _C.TRAIN.MIN_LR = 5e-6
 # Clip gradient norm
-
-# Auto resume from latest checkpoint
-_C.train.auto_resume = False
-# Gradient accumulation steps
 # could be overwritten by command line argument
 # Whether to use gradient checkpointing to save memory
 # could be overwritten by command line argument
@@ -145,6 +142,8 @@ _C.loss.weights.giou = 1.0
 _C.loss.weights.box_corners = 1.0
 _C.loss.weights.size = 1.0
 _C.loss.weights.size_reg = 1.0
+_C.loss.weights.angle_cls = 0.1
+_C.loss.weights.angle_reg = 0.1
 
 # # Whether to use center crop when testing
 # _C.TEST.CROP = True

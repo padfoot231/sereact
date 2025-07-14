@@ -429,7 +429,7 @@ class Model3DDETR(nn.Module):
         position_embedding: str = 'Fourier',
         mlp_dropout: float = 0.3,
         num_queries: int = 256,
-        num_angular_bins: int = 12,
+        num_angular_bins: int = 1,
         rgb_backbone_output_dim=64,
         intrinsics=None,
         image_size=(578, 646),
@@ -550,7 +550,6 @@ class Model3DDETR(nn.Module):
         if pc_features is not None:
             fused = torch.cat([pc_features, sampled_rgb], dim=1)
         else:
-            # breakpoint()
             fused = sampled_rgb
         return self.rgb_proj(fused)
 
@@ -767,12 +766,12 @@ class Model3DDETR(nn.Module):
                 'center_normalized': center_normalized.contiguous(),
                 'center_unnormalized': center_unnormalized,
                 'size_normalized': size_normalized[i],
+                'angle_logits': angle_logits[i],
                 'angle_residual': angle_residual[i],
                 'angle_residual_normalized': angle_residual_normalized[i],
                 'angle_contiguous': angle_contiguous,
                 'box_corners': box_corners,
             }
-            # 'angle_logits': angle_logits[i],
 
             outputs.append(box_prediction)
 
@@ -785,11 +784,76 @@ class Model3DDETR(nn.Module):
             'auxiliary_outputs': auxiliary_outputs,  # Output from the intermediate layers of the decoder
         }
 
+    def pad_point_clouds(self, point_clouds: List[torch.Tensor], max_points: int = None) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Pad point clouds to same size and create attention masks.
+
+        Args:
+            point_clouds: List of point cloud tensors with different sizes
+            max_points: Maximum number of points (if None, use max in batch)
+
+        Returns:
+            Tuple of (padded_point_clouds, attention_masks)
+        """
+        if max_points is None:
+            max_points = max(pc.shape[0] for pc in point_clouds)
+
+        batch_size = len(point_clouds)
+        feature_dim = point_clouds[0].shape[1]
+
+        # Create padded tensor
+        padded_pcs = torch.zeros(batch_size, max_points, feature_dim,
+                                device=point_clouds[0].device, dtype=point_clouds[0].dtype)
+
+        # Create attention masks (True for valid points, False for padding)
+        attention_masks = torch.zeros(batch_size, max_points, dtype=torch.bool,
+                                     device=point_clouds[0].device)
+
+        for i, pc in enumerate(point_clouds):
+            num_points = pc.shape[0]
+            padded_pcs[i, :num_points] = pc
+            attention_masks[i, :num_points] = True
+
+        return padded_pcs, attention_masks
+
+    def forward_batched(self, inputs_point_cloud, input_image, point_cloud_dims_min, point_cloud_dims_max, encoder_only=False):
+        """Optimized batched forward pass with padding and masking."""
+        batch_size = len(inputs_point_cloud)
+
+        # Pad point clouds to same size
+        padded_pcs, pc_masks = self.pad_point_clouds(inputs_point_cloud)
+
+        # Process all point clouds at once
+        all_xyz = []
+        all_feats = []
+
+        for i in range(batch_size):
+            pc_tensor = padded_pcs[i][pc_masks[i]]  # Remove padding for processing
+            xyz, feats = self._break_up_pc(pc_tensor.unsqueeze(0))
+
+            if self.use_rgb_fusion:
+                feats = self.fuse_rgb_with_points(xyz, feats, input_image[i].unsqueeze(0))
+
+            all_xyz.append(xyz.squeeze(0))
+            all_feats.append(feats.squeeze(0))
+
+        # Pad features after processing
+        padded_xyz, xyz_masks = self.pad_point_clouds(all_xyz)
+        padded_feats, feat_masks = self.pad_point_clouds(all_feats)
+
+        # Continue with batched processing...
+        # Note: This requires modifying pre_encoder to handle masks
+
+        return self.forward_with_masks(padded_xyz, padded_feats, xyz_masks,
+                                     point_cloud_dims_min, point_cloud_dims_max, encoder_only)
+
     def forward(self, inputs_point_cloud, input_image, point_cloud_dims_min, point_cloud_dims_max, encoder_only=False):
+        """Main forward pass - can switch between batched and loop-based processing."""
+        # For now, keep the original loop-based approach for compatibility
+        # TODO: Switch to forward_batched once pre_encoder supports masking
+
         batch_predictions = []
 
         for inputs_pcd, input_rgb, pcd_dim_min, pcd_dim_max in zip(inputs_point_cloud, input_image, point_cloud_dims_min, point_cloud_dims_max):
-            # breakpoint()
             rgb = input_rgb
             pc_tensor = inputs_pcd
 
@@ -797,7 +861,7 @@ class Model3DDETR(nn.Module):
 
             if self.use_rgb_fusion:
                 feats = self.fuse_rgb_with_points(xyz, feats, rgb.unsqueeze(0))
-            # breakpoint()
+
             xyz, features, indices = self.pre_encoder(xyz, feats)
             features = features.permute(2, 0, 1)
 
@@ -809,7 +873,7 @@ class Model3DDETR(nn.Module):
             if encoder_only:
                 batch_predictions.append((encoder_xyz, encoder_features.transpose(0, 1)))
                 continue
-            # breakpoint()
+
             point_cloud_dims = [pcd_dim_min, pcd_dim_max]
 
             query_xyz, query_embeddings = self.get_query_embedding(encoder_xyz, point_cloud_dims)

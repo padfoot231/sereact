@@ -16,7 +16,7 @@ import torch.distributed as dist
 from torch.utils.data import Dataset, DataLoader
 from torchvision import datasets, transforms
 from .samplers import SubsetRandomSampler
-from .miscellaneous import collate_fn, worker_init_fn
+from utils.miscellaneous import collate_fn, worker_init_fn
 from .sereact_data_loader import SereactDataloader
 from .augmentations import SereactAugmentation
 
