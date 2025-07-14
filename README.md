@@ -15,11 +15,192 @@ A PyTorch implementation of 3D object detection using a modified 3DETR (3D Detec
 - **Extensive Testing**: Unit and integration tests with 90%+ coverage
 - **Wandb Integration**: Experiment tracking and visualization
 
-## 📋 Requirements
+## 📋 Requirements & Environment Setup
 
-### Dependencies
+### System Requirements
 
-define requirement.txt
+- **Python**: 3.7 - 3.10 (Recommended: 3.8)
+- **CUDA**: 11.0+ (for GPU acceleration)
+- **GPU**: NVIDIA GPU with 8GB+ VRAM (recommended)
+- **RAM**: 16GB+ system memory
+- **Storage**: 10GB+ free space
+
+### 🐍 Python Environment Setup
+
+#### Option 1: Conda Environment (Recommended)
+
+```bash
+# Create new conda environment with Python 3.8
+conda create -n sereact python=3.8 -y
+
+# Activate the environment
+conda activate sereact
+
+# Install PyTorch with CUDA support (adjust CUDA version as needed)
+conda install pytorch torchvision pytorch-cuda=11.8 -c pytorch -c nvidia
+
+# Navigate to project directory
+cd /path/to/sereact
+
+# Install remaining dependencies
+pip install -r requirements.txt
+```
+
+#### Option 2: Virtual Environment (venv)
+
+```bash
+# Create virtual environment
+python3.8 -m venv sereact_env
+
+# Activate environment (Linux/Mac)
+source sereact_env/bin/activate
+
+# Activate environment (Windows)
+# sereact_env\Scripts\activate
+
+# Upgrade pip
+pip install --upgrade pip
+
+# Install PyTorch with CUDA
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+
+# Install other dependencies
+pip install -r requirements.txt
+```
+
+### 📦 Core Dependencies
+
+The project uses a minimal set of essential packages (see `requirements.txt`):
+
+```txt
+# Core Deep Learning
+torch>=1.8.0,<2.5.0
+torchvision>=0.9.0,<0.20.0
+
+# Scientific Computing
+numpy>=1.21.0,<2.0.0
+scipy>=1.7.0,<2.0.0
+
+# Computer Vision & 3D Processing
+Pillow>=8.0.0
+opencv-python>=4.5.0
+open3d>=0.15.0
+
+# Configuration & Utilities
+yacs>=0.1.8
+PyYAML>=5.4.0
+timm>=0.4.12,<1.0.0
+
+# Experiment Tracking
+wandb>=0.12.0
+
+# Data Processing
+imageio>=2.9.0
+matplotlib>=3.3.0
+scikit-learn>=1.0.0
+tqdm>=4.60.0
+```
+
+### 🔧 CUDA Extensions Setup
+
+The project includes custom CUDA extensions for PointNet++ operations. These will be compiled automatically on first run:
+
+```bash
+# Ensure CUDA toolkit is installed and accessible
+nvcc --version
+
+# The extensions will compile automatically when first imported
+# Look for compilation messages during first training run
+```
+
+### ✅ Verify Installation
+
+```bash
+# Test PyTorch CUDA availability
+python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
+
+# Test core imports
+python -c "
+import torch
+import torchvision
+import numpy as np
+import open3d as o3d
+import wandb
+print('✅ All core dependencies imported successfully!')
+"
+
+# Test model import (this will compile CUDA extensions)
+python -c "
+from models.detr3d.model_3ddetr import build_3ddetr_model
+print('✅ Model imports successful!')
+"
+```
+
+## 🚀 Quick Start
+
+### 1. Clone and Setup Environment
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd sereact
+
+# Create and activate conda environment
+conda create -n sereact python=3.8 -y
+conda activate sereact
+
+# Install PyTorch with CUDA
+conda install pytorch torchvision pytorch-cuda=11.8 -c pytorch -c nvidia
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+### 2. Prepare Dataset
+
+Organize your dataset in the following structure:
+```
+dataset/
+├── object_1/
+│   ├── bbox3d.npy          # 3D bounding box annotations
+│   ├── mask.npy            # Segmentation mask
+│   ├── pc.npy              # Point cloud data
+│   └── rgb.png             # RGB image
+├── object_2/
+└── ...
+```
+
+### 3. Configure Training
+
+Edit `config/base_train.yaml`:
+```yaml
+data:
+  data_path: "/path/to/your/dataset"
+  batch_size: 1
+
+model:
+  pretrained_weights_path: "/path/to/pretrained/weights"
+```
+
+### 4. Start Training
+
+```bash
+# Single GPU training
+python main.py --cfg config/base_train.yaml --data-path /path/to/dataset
+
+# Multi-GPU distributed training
+bash train.sh
+```
+
+### 5. Monitor Training
+
+```bash
+# View logs
+tail -f logs/training.log
+
+# Monitor with Wandb (if enabled)
+# Check your Wandb dashboard for real-time metrics
+```
 
 ## 🏗️ Architecture
 
@@ -183,6 +364,104 @@ python run_tests.py --file test_losses.py
 ```
 
 ## 📝 Example Results
+
+| Epoch | Val/IoU@0.25 | Val/IoU@0.50 | Val/Mean IoU | Angle Accuracy |
+|-------|--------------|--------------|--------------|----------------|
+|   10  |    0.348     |    0.064     |    0.213     |     0.156      |
+|   30  |    0.392     |    0.061     |    0.227     |     0.184      |
+
+## 🔧 Troubleshooting
+
+### Common Environment Issues
+
+#### CUDA Extension Compilation Errors
+```bash
+# Error: "Microsoft Visual C++ 14.0 is required" (Windows)
+# Solution: Install Visual Studio Build Tools
+# Download from: https://visualstudio.microsoft.com/visual-cpp-build-tools/
+
+# Error: "nvcc not found"
+# Solution: Add CUDA to PATH
+export PATH=/usr/local/cuda/bin:$PATH
+export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+```
+
+#### Memory Issues
+```bash
+# Error: "CUDA out of memory"
+# Solution: Reduce batch size in config
+data:
+  batch_size: 1  # Reduce from default
+
+# Error: "RuntimeError: cuDNN error: CUDNN_STATUS_NOT_INITIALIZED"
+# Solution: Clear GPU cache and restart
+python -c "import torch; torch.cuda.empty_cache()"
+```
+
+#### Import Errors
+```bash
+# Error: "ModuleNotFoundError: No module named 'timm'"
+# Solution: Install missing packages
+pip install timm
+
+# Error: "ImportError: cannot import name '_ext_src'"
+# Solution: CUDA extensions need compilation
+# This happens automatically on first run - be patient!
+```
+
+#### Performance Issues
+```bash
+# Slow training on CPU
+# Solution: Verify CUDA installation
+python -c "import torch; print(torch.cuda.is_available())"
+
+# If False, reinstall PyTorch with CUDA:
+pip uninstall torch torchvision
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+```
+
+### Environment Verification Script
+
+Create `verify_env.py`:
+```python
+#!/usr/bin/env python3
+"""Verify Sereact environment setup."""
+
+def verify_environment():
+    try:
+        import torch
+        print(f"✅ PyTorch {torch.__version__}")
+        print(f"✅ CUDA available: {torch.cuda.is_available()}")
+        if torch.cuda.is_available():
+            print(f"✅ CUDA version: {torch.version.cuda}")
+            print(f"✅ GPU count: {torch.cuda.device_count()}")
+
+        import torchvision
+        print(f"✅ Torchvision {torchvision.__version__}")
+
+        import numpy as np
+        print(f"✅ NumPy {np.__version__}")
+
+        import open3d as o3d
+        print(f"✅ Open3D {o3d.__version__}")
+
+        from models.detr3d.model_3ddetr import build_3ddetr_model
+        print("✅ Model imports successful")
+
+        print("\n🎉 Environment verification complete!")
+
+    except ImportError as e:
+        print(f"❌ Import error: {e}")
+        print("Please install missing dependencies")
+
+if __name__ == "__main__":
+    verify_environment()
+```
+
+Run verification:
+```bash
+python verify_env.py
+```
 
 ## 🔧 Development
 
