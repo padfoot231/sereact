@@ -39,7 +39,7 @@ from config import get_config
 from dataloader import build_loader
 
 from logger import create_logger
-from utils_help import load_checkpoint, load_pretrained, save_checkpoint, NativeScalerWithGradNormCount, auto_resume_helper, \
+from utils_help import save_checkpoint, NativeScalerWithGradNormCount, auto_resume_helper, \
     reduce_tensor
 
 transform = T.ToPILImage()
@@ -203,15 +203,18 @@ def train_one_epoch(config, model, loss_module, iou_evaluator, data_loader, opti
     for batch_idx, batch in enumerate(data_loader):
         # breakpoint()
         # Move input data to the specified device
+        # breakpoint()
         inputs = [obj.cuda() for obj in batch['pcd_tensor']]
+        inputs_rgb = [obj.cuda() for obj in batch['rgb_tensor']]
         gt_bboxes = [obj.cuda() for obj in batch['bbox3d_tensor']]
         pcd_dims_min = [obj.cuda() for obj in batch['point_cloud_dims_min']]
         pcd_dims_max = [obj.cuda() for obj in batch['point_cloud_dims_max']]
         # Enable anomaly detection for debugging
         torch.autograd.set_detect_anomaly(True)
-        
+        # breakpoint()
         outputs = model(
             inputs,
+            inputs_rgb, 
             point_cloud_dims_min=pcd_dims_min,
             point_cloud_dims_max=pcd_dims_max,
         )
@@ -228,7 +231,7 @@ def train_one_epoch(config, model, loss_module, iou_evaluator, data_loader, opti
         for aux in pred_boxes_aux:
             loss_aux_cls, loss_dict_aux, assignments_aux = loss_module(aux, gt_bbox)
             loss_aux += loss_aux_cls
-        total_loss = loss + 0.2*loss_aux
+        total_loss = loss + 0.01*loss_aux
         # this attribute is added by timm on one optimizer (adahessian)
         is_second_order = hasattr(optimizer, 'is_second_order') and optimizer.is_second_order
         grad_norm = loss_scaler(total_loss, optimizer, clip_grad=config.train.clip_grad,
@@ -322,6 +325,7 @@ def validate(config, loss_module, epoch, iou_evaluator, data_loader, model):
         # Move input data to the specified device
         inputs = [obj.cuda() for obj in batch_data['pcd_tensor']]
         gt_bboxes = [obj.cuda() for obj in batch_data['bbox3d_tensor']]
+        inputs_rgb = [obj.cuda() for obj in batch_data['rgb_tensor']]
         pcd_dims_min = [obj.cuda() for obj in batch_data['point_cloud_dims_min']]
         pcd_dims_max = [obj.cuda() for obj in batch_data['point_cloud_dims_max']]
 
@@ -329,6 +333,7 @@ def validate(config, loss_module, epoch, iou_evaluator, data_loader, model):
         # inputs = {"point_clouds": batch_data["pcd"]}
         outputs = model(
             inputs,
+            inputs_rgb,
             point_cloud_dims_min=pcd_dims_min,
             point_cloud_dims_max=pcd_dims_max,
         )

@@ -146,9 +146,11 @@ class SereactDataloader(Dataset):
                 },
             }
         else:
+            # print("ass", mask)
             data_dict = {
                 'rgb_tensor': rgb_tensor,
                 'pcd_tensor': pcd_tensor,
+                'mask': mask,
                 'bbox3d_tensor': bbox_3d_tensor,
                 'point_cloud_dims_min': np.array(pcd_normalized).reshape(-1, 3).min(axis=0)[:3],
                 'point_cloud_dims_max': np.array(pcd_normalized).reshape(-1, 3).max(axis=0)[:3],

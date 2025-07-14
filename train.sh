@@ -11,4 +11,4 @@ python -m torch.distributed.launch \
 --cfg config/base_train.yaml \
 --output /home-local2/akath.extra.nobkp/sereact \
 --data-path /home-local2/akath.extra.nobkp/dl_challenge \
---batch-size 1
+--batch-size 2

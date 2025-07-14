@@ -700,7 +700,7 @@ class PointnetSAModuleVotes(nn.Module):
         inds: torch.Tensor
             (B, npoint) tensor of the inds
         """
-
+        # breakpoint(),
         xyz_flipped = xyz.transpose(1, 2).contiguous()
         if inds is None:
             inds = furthest_point_sample(xyz, self.npoint)
@@ -714,7 +714,10 @@ class PointnetSAModuleVotes(nn.Module):
             grouped_features, grouped_xyz = self.grouper(
                 xyz, new_xyz, features
             )  # (B, C, npoint, nsample)
+            grouped_features = grouped_features[:, 3:, :, :] 
+            # breakpoint()
         else:
+            # breakpoint()
             grouped_features, grouped_xyz, unique_cnt = self.grouper(
                 xyz, new_xyz, features
             )  # (B, C, npoint, nsample), (B,3,npoint,nsample), (B,npoint)

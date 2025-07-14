@@ -146,6 +146,7 @@ def collate_fn(batch: List[dict]) -> dict:
     pcd_max = [torch.from_numpy(item['point_cloud_dims_max']) for item in batch]
     # RGB tensor image
     rgb_tensors = [item['rgb_tensor'] for item in batch]
+    mask = [item['mask'] for item in batch]
 
     return {
         # Can't stack here because of different number of points
@@ -154,6 +155,7 @@ def collate_fn(batch: List[dict]) -> dict:
         'point_cloud_dims_min': pcd_min,
         'point_cloud_dims_max': pcd_max,
         'rgb_tensor': rgb_tensors,
+        'mask': mask,
     }
 
 def move_to_device(data: Union[dict, torch.Tensor], device: torch.device) -> Union[dict, torch.Tensor]:

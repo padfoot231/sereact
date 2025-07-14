@@ -1,0 +1,10 @@
+# ninja log v5
+0	11998	1752253818285848547	/home-local/akath.nobkp/codingchallenge_sereact/models/detr3d/build/temp.linux-x86_64-cpython-37/_ext_src/src/ball_query_gpu.o	ff1c4d31894739c3
+2	13000	1752253819289831021	/home-local/akath.nobkp/codingchallenge_sereact/models/detr3d/build/temp.linux-x86_64-cpython-37/_ext_src/src/interpolate_gpu.o	b01d9ea2137fed98
+3	13638	1752253819929819851	/home-local/akath.nobkp/codingchallenge_sereact/models/detr3d/build/temp.linux-x86_64-cpython-37/_ext_src/src/sampling_gpu.o	a8d06cbec1cfa753
+1	13988	1752253820277813777	/home-local/akath.nobkp/codingchallenge_sereact/models/detr3d/build/temp.linux-x86_64-cpython-37/_ext_src/src/group_points_gpu.o	a5899758a82cc1a5
+1	16352	1752253822641772522	/home-local/akath.nobkp/codingchallenge_sereact/models/detr3d/build/temp.linux-x86_64-cpython-37/_ext_src/src/group_points.o	163add68ba0dfc8f
+0	17328	1752253823613755561	/home-local/akath.nobkp/codingchallenge_sereact/models/detr3d/build/temp.linux-x86_64-cpython-37/_ext_src/src/ball_query.o	625202524c780d75
+3	17739	1752253824025748373	/home-local/akath.nobkp/codingchallenge_sereact/models/detr3d/build/temp.linux-x86_64-cpython-37/_ext_src/src/sampling.o	10e6bc2b39d0ec69
+2	17998	1752253824285743836	/home-local/akath.nobkp/codingchallenge_sereact/models/detr3d/build/temp.linux-x86_64-cpython-37/_ext_src/src/interpolate.o	e53c150b708c0447
+1	23349	1752253829633650545	/home-local/akath.nobkp/codingchallenge_sereact/models/detr3d/build/temp.linux-x86_64-cpython-37/_ext_src/src/bindings.o	7a317ae3fe0a667

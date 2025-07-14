@@ -100,8 +100,8 @@ def build_loader(config):
 
 def build_dataset(is_train, config):
     if config.data.dataset == 'Sereact_dataset':
-        transform = SereactAugmentation() if is_train else None
-        # transform = None
+        # transform = SereactAugmentation() if is_train else None
+        transform = None
         task = 'train' if is_train else 'test'
         dataset = SereactDataloader(
             source_path=config.data.data_path,

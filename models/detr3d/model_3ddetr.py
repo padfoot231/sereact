@@ -10,7 +10,7 @@ from functools import partial
 import numpy as np
 import torch
 import torch.nn as nn
-from omegaconf import DictConfig
+import torch.nn.functional as F
 from typing import List, Union, Optional, Tuple, Dict
 
 from models.detr3d.helpers import ACTIVATION_DICT, NORM_DICT, WEIGHT_INIT_DICT
@@ -21,6 +21,7 @@ from models.detr3d.transformer_detr import (
     TransformerEncoder,
     TransformerEncoderLayer,
 )
+from torchvision.models import resnet18
 from utils.bounding_box_operations import flip_axis_to_camera_tensor, get_3d_box_batch_tensor
 from utils.miscellaneous import farthest_point_sample, scale_points, shift_scale_points
 
@@ -429,6 +430,12 @@ class Model3DDETR(nn.Module):
         mlp_dropout: float = 0.3,
         num_queries: int = 256,
         num_angular_bins: int = 12,
+        rgb_backbone_output_dim=64,
+        intrinsics=None,
+        image_size=(578, 646),
+        use_rgb_fusion=True,
+        use_mask_supervision=True,
+        num_classes=10,
     ) -> None:
         # Calling parent constructor and initializing the variables
         super().__init__()
@@ -464,6 +471,40 @@ class Model3DDETR(nn.Module):
             hidden_use_bias=True,
         )
 
+        # Image fusion 
+
+        self.use_rgb_fusion = use_rgb_fusion
+        self.use_mask_supervision = use_mask_supervision
+        self.image_size = image_size
+        self.intrinsics = intrinsics if intrinsics is not None else torch.tensor([
+            [575.0, 0.0, 323.0],
+            [0.0, 575.0, 289.0],
+            [0.0, 0.0, 1.0]
+        ])
+
+        if use_rgb_fusion:
+            self.rgb_backbone = nn.Sequential(
+                *list(resnet18(pretrained=True).children())[:6]
+            )  # Output: (B, 64, H/8, W/8)
+            # self.rgb_proj = nn.Conv1d(rgb_backbone_output_dim + self.pre_encoder.mlp[-1].out_channels,
+            #                           self.pre_encoder.mlp[-1].out_channels, 1)
+            feat_dim = encoder_dim  # or config.model.encoder.dim if you're passing it
+            self.rgb_proj = nn.Conv1d(
+                rgb_backbone_output_dim*2,
+                3,
+                kernel_size=1
+)
+
+
+        # if use_mask_supervision:
+        #     self.segmentation_head = nn.Sequential(
+        #         nn.Conv1d(encoder_dim, 128, kernel_size=1),
+        #         nn.ReLU(),
+        #         nn.Conv1d(128, num_classes, kernel_size=1)
+        #     )
+
+
+
         # Member for decoder
         self.decoder = decoder
 
@@ -475,6 +516,43 @@ class Model3DDETR(nn.Module):
 
         # Member for converting MLP output to bounding boxes
         self.box_processor = BoxProcessor()
+
+    def project_points(self, points_3d, intrinsics, image_size):
+        fx, fy = intrinsics[0, 0], intrinsics[1, 1]
+        cx, cy = intrinsics[0, 2], intrinsics[1, 2]
+
+        x = points_3d[:, :, 0]
+        y = points_3d[:, :, 1]
+        z = points_3d[:, :, 2].clamp(min=1e-5)
+
+        u = fx * (x / z) + cx
+        v = fy * (y / z) + cy
+
+        h, w = image_size
+        u = u.clamp(0, w - 1)
+        v = v.clamp(0, h - 1)
+
+        return torch.stack([u, v], dim=-1)  # (B, N, 2)
+
+    def sample_rgb_features(self, rgb_feat, uv_coords):
+        B, C, H, W = rgb_feat.shape
+        uv_norm = uv_coords.clone()
+        uv_norm[..., 0] = (uv_coords[..., 0] / (W - 1)) * 2 - 1
+        uv_norm[..., 1] = (uv_coords[..., 1] / (H - 1)) * 2 - 1
+        grid = uv_norm.unsqueeze(2)
+        sampled = F.grid_sample(rgb_feat, grid, mode='bilinear', align_corners=True)
+        return sampled.squeeze(3)
+
+    def fuse_rgb_with_points(self, pc_xyz, pc_features, rgb_image):
+        rgb_feat = self.rgb_backbone(rgb_image)
+        uv_coords = self.project_points(pc_xyz, self.intrinsics.to(pc_xyz.device), self.image_size)
+        sampled_rgb = self.sample_rgb_features(rgb_feat, uv_coords)
+        if pc_features is not None:
+            fused = torch.cat([pc_features, sampled_rgb], dim=1)
+        else:
+            # breakpoint()
+            fused = sampled_rgb
+        return self.rgb_proj(fused)
 
     def build_mlp_heads(self, decoder_dim: int, mlp_dropout: float, num_angular_bins: int) -> None:
         """Builds the MLP heads for the 3D bounding box detection model.
@@ -572,48 +650,48 @@ class Model3DDETR(nn.Module):
 
         return xyz, features
 
-    def run_encoder(
-        self, point_clouds: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Runs the encoder on the given point clouds.
-            point_clouds (torch.Tensor): The input point clouds with shape (batch_size, num_points, num_features).
+    # def run_encoder(
+    #     self, point_clouds: torch.Tensor
+    # ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    #     """Runs the encoder on the given point clouds.
+    #         point_clouds (torch.Tensor): The input point clouds with shape (batch_size, num_points, num_features).
 
-        Returns:
-            tuple: A tuple containing:
-            - encoder_xyz (torch.Tensor): The encoded xyz coordinates with shape (batch_size, num_points, 3).
-            - encoder_features (torch.Tensor): The encoded features with shape (num_points, batch_size, num_features).
-            - encoder_indices (torch.Tensor): The indices of the points used in the encoder with shape (batch_size, num_points).
-        """
-        # break-up point cloud into xyz and features
-        xyz, features = self._break_up_pc(point_clouds)
+    #     Returns:
+    #         tuple: A tuple containing:
+    #         - encoder_xyz (torch.Tensor): The encoded xyz coordinates with shape (batch_size, num_points, 3).
+    #         - encoder_features (torch.Tensor): The encoded features with shape (num_points, batch_size, num_features).
+    #         - encoder_indices (torch.Tensor): The indices of the points used in the encoder with shape (batch_size, num_points).
+    #     """
+    #     # break-up point cloud into xyz and features
+    #     xyz, features = self._break_up_pc(point_clouds)
 
-        # Pass the point cloud through the pre-encoder
-        pre_encoder_xyz, pre_encoder_features, pre_encoder_indices = self.pre_encoder(xyz, features)
+    #     # Pass the point cloud through the pre-encoder
+    #     pre_encoder_xyz, pre_encoder_features, pre_encoder_indices = self.pre_encoder(xyz, features)
 
-        # Dimensions are:
-        # xyz: (batch_size, num_points, 3)
-        # features: (batch_size, num_features, num_points)
-        # indices: (batch_size, num_points)
+    #     # Dimensions are:
+    #     # xyz: (batch_size, num_points, 3)
+    #     # features: (batch_size, num_features, num_points)
+    #     # indices: (batch_size, num_points)
 
-        # Multihead attention in encoder expects num_points x batch x num_features
-        pre_encoder_features = pre_encoder_features.permute(2, 0, 1)
+    #     # Multihead attention in encoder expects num_points x batch x num_features
+    #     pre_encoder_features = pre_encoder_features.permute(2, 0, 1)
 
-        # XYZ points are in (batch, num_points, 3) order
-        encoder_xyz, encoder_features, encoder_indices = self.encoder(
-            pre_encoder_features, xyz=pre_encoder_xyz
-        )
+    #     # XYZ points are in (batch, num_points, 3) order
+    #     encoder_xyz, encoder_features, encoder_indices = self.encoder(
+    #         pre_encoder_features, xyz=pre_encoder_xyz
+    #     )
 
-        # Checks
-        if encoder_indices is None:
-            # Encoder does not perform dowmsampling
-            encoder_indices = pre_encoder_indices
-        else:
-            # Use gather to ensure that it works for both FPS and random sampling
-            encoder_indices = torch.gather(
-                pre_encoder_indices, 1, encoder_indices.type(torch.int64)
-            )
+    #     # Checks
+    #     if encoder_indices is None:
+    #         # Encoder does not perform dowmsampling
+    #         encoder_indices = pre_encoder_indices
+    #     else:
+    #         # Use gather to ensure that it works for both FPS and random sampling
+    #         encoder_indices = torch.gather(
+    #             pre_encoder_indices, 1, encoder_indices.type(torch.int64)
+    #         )
 
-        return encoder_xyz, encoder_features, encoder_indices
+    #     return encoder_xyz, encoder_features, encoder_indices
 
     def get_box_prediction(
         self,
@@ -707,84 +785,49 @@ class Model3DDETR(nn.Module):
             'auxiliary_outputs': auxiliary_outputs,  # Output from the intermediate layers of the decoder
         }
 
-    def forward(
-        self,
-        inputs_list: List[Dict[str, torch.Tensor]],
-        point_cloud_dims_min: torch.Tensor,
-        point_cloud_dims_max: torch.Tensor,
-        encoder_only: bool = False,
-    ) -> Union[List[Dict[str, torch.Tensor]], torch.Tensor]:
-        """Forward pass of the 3D DETR model.
-
-        Args:
-            inputs (List[Dict[str, Any]]): Dictionary with point cloud information.
-            point_cloud_dims_min (Tensor): Minimum coordinates of the point cloud.
-            point_cloud_dims_max (Tensor): Maximum coordinates of the point cloud.
-            encoder_only (bool, optional): Book to check if this is for encoder only.
-                Defaults to False.
-        """
-        # List to store batch predictions
+    def forward(self, inputs_point_cloud, input_image, point_cloud_dims_min, point_cloud_dims_max, encoder_only=False):
         batch_predictions = []
 
-        for input, pcd_dim_min, pcd_dim_max in zip(
-            inputs_list, point_cloud_dims_min, point_cloud_dims_max
-        ):
-            # Get the point cloud from the input
-            # Add a batch dimension that is expected for the by the encoder part
-            point_clouds = input.unsqueeze(dim=0)
-            # point_clouds = input["pcd_tensor"]
+        for inputs_pcd, input_rgb, pcd_dim_min, pcd_dim_max in zip(inputs_point_cloud, input_image, point_cloud_dims_min, point_cloud_dims_max):
+            # breakpoint()
+            rgb = input_rgb
+            pc_tensor = inputs_pcd
 
-            # Run it through the encoder
-            encoder_xyz, encoder_features, _ = self.run_encoder(point_clouds)
+            xyz, feats = self._break_up_pc(pc_tensor.unsqueeze(0))
 
-            # Modify the shape encoder features
-            # Previously encoder_feature shape was modified to (num_points, batch_size, num_features)
+            if self.use_rgb_fusion:
+                feats = self.fuse_rgb_with_points(xyz, feats, rgb.unsqueeze(0))
+            # breakpoint()
+            xyz, features, indices = self.pre_encoder(xyz, feats)
+            features = features.permute(2, 0, 1)
+
+            encoder_xyz, encoder_features, _ = self.encoder(features, xyz=xyz)
             encoder_features = self.encoder_decoder_projection(
                 encoder_features.permute(1, 2, 0)
             ).permute(2, 0, 1)
 
-            # Note down the shape of the intermediate features
             if encoder_only:
-                batch_predictions.append(encoder_xyz, encoder_features.transpose(0, 1))
+                batch_predictions.append((encoder_xyz, encoder_features.transpose(0, 1)))
                 continue
-
-            # Append the Point cloud dimensions
-            # The below values needs to be hardcoded or gotten from argparse
+            # breakpoint()
             point_cloud_dims = [pcd_dim_min, pcd_dim_max]
 
-            # Get the query embeddings
             query_xyz, query_embeddings = self.get_query_embedding(encoder_xyz, point_cloud_dims)
 
-            # Query embedding shape: (batch_size, channels, num_points)
-            encoder_pos = self.positional_embedding(encoder_xyz, input_range=point_cloud_dims)
-
-            # The decoder expects the query embeddings to be in the shape (num_points, batch_size, channels)
-            encoder_pos = encoder_pos.permute(2, 0, 1)
-            # Similarly, the query embeddings are in the shape (batch_size, channels, num_points)
+            encoder_pos = self.positional_embedding(encoder_xyz, input_range=point_cloud_dims).permute(2, 0, 1)
             query_embeddings = query_embeddings.permute(2, 0, 1)
             target = torch.zeros_like(query_embeddings)
 
-            # Get the box features
             box_features = self.decoder(
                 tgt=target,
                 memory=encoder_features,
-                query_pos=query_embeddings,  # Query position is embeddings
-                pos=encoder_pos,  # Position is encoder positional embedding
+                query_pos=query_embeddings,
+                pos=encoder_pos
             )[0]
 
-            # Predict the bounding boxes
             box_predictions = self.get_box_prediction(query_xyz, point_cloud_dims, box_features)
-
-            # Add the prediction for this sample to the batch
             batch_predictions.append(box_predictions)
-
-        # Stack predictions into a single tensor or return as a list
-        # The below logic can be checked once we do the forward pass
-        return (
-            torch.stack(batch_predictions)
-            if isinstance(batch_predictions[0], torch.Tensor)
-            else batch_predictions
-        )
+        return batch_predictions
 
 
 # Function to build pre_encoder
