@@ -19,15 +19,25 @@ A PyTorch implementation of 3D object detection using a modified 3DETR (3D Detec
 
 ### System Requirements
 
-- **Python**: 3.7 - 3.10 (Recommended: 3.8)
-- **CUDA**: 11.0+ (for GPU acceleration)
+#### Modern Setup (Recommended)
+- **Python**: 3.8 - 3.10 (Recommended: 3.8)
+- **PyTorch**: 1.10+ with torchrun support
+- **CUDA**: 11.1+ (for GPU acceleration)
 - **GPU**: NVIDIA GPU with 8GB+ VRAM (recommended)
 - **RAM**: 16GB+ system memory
 - **Storage**: 10GB+ free space
 
+#### Legacy Setup (Python 3.7.16 + PyTorch 1.8.0)
+- **Python**: 3.7.16 (exact version for compatibility)
+- **PyTorch**: 1.8.0 (last version with full Python 3.7 support)
+- **CUDA**: 10.2 or 11.1 (compatible with PyTorch 1.8.0)
+- **GPU**: NVIDIA GPU with 6GB+ VRAM
+- **RAM**: 12GB+ system memory
+- **Storage**: 8GB+ free space
+
 ### 🐍 Python Environment Setup
 
-#### Option 1: Conda Environment (Recommended)
+#### Option 1: Modern Setup (Python 3.8+ & PyTorch 1.10+) - Recommended
 
 ```bash
 # Create new conda environment with Python 3.8
@@ -46,7 +56,24 @@ cd /path/to/sereact
 pip install -r requirements.txt
 ```
 
-#### Option 2: Virtual Environment (venv)
+#### Option 2: Legacy Setup (Python 3.7.16 & PyTorch 1.8.0) - For Compatibility
+
+```bash
+# Automated setup (recommended)
+./setup_env_py37.sh
+
+# Manual setup
+conda create -n sereact_py37 python=3.7.16 -y
+conda activate sereact_py37
+
+# Install PyTorch 1.8.0 with CUDA 10.2
+conda install pytorch==1.8.0 torchvision==0.9.0 cudatoolkit=10.2 -c pytorch
+
+# Install remaining dependencies
+pip install -r requirements_py37.txt
+```
+
+#### Option 3: Virtual Environment (venv) - Modern Setup
 
 ```bash
 # Create virtual environment
@@ -70,8 +97,7 @@ pip install -r requirements.txt
 
 ### 📦 Core Dependencies
 
-The project uses a minimal set of essential packages (see `requirements.txt`):
-
+#### Modern Setup Dependencies (`requirements.txt`)
 ```txt
 # Core Deep Learning
 torch>=1.8.0,<2.5.0
@@ -94,11 +120,26 @@ timm>=0.4.12,<1.0.0
 # Experiment Tracking
 wandb>=0.12.0
 
-# Data Processing
+# Data Processing & Utilities
 imageio>=2.9.0
 matplotlib>=3.3.0
 scikit-learn>=1.0.0
 tqdm>=4.60.0
+termcolor>=1.1.0
+shapely>=1.8.0
+```
+
+#### Legacy Setup Dependencies (`requirements_py37.txt`)
+```txt
+# Python 3.7.16 + PyTorch 1.8.0 compatible versions
+torch==1.8.0
+torchvision==0.9.0
+numpy>=1.19.0,<1.22.0
+scipy>=1.5.0,<1.8.0
+open3d>=0.12.0,<0.16.0
+timm>=0.4.5,<0.6.0
+wandb>=0.10.0,<0.13.0
+# ... other compatible versions
 ```
 
 ### 🔧 CUDA Extensions Setup
@@ -115,19 +156,13 @@ nvcc --version
 
 ### ✅ Verify Installation
 
+#### For Modern Setup:
 ```bash
 # Test PyTorch CUDA availability
 python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
 
-# Test core imports
-python -c "
-import torch
-import torchvision
-import numpy as np
-import open3d as o3d
-import wandb
-print('✅ All core dependencies imported successfully!')
-"
+# Run verification script
+python verify_env.py
 
 # Test model import (this will compile CUDA extensions)
 python -c "
@@ -136,24 +171,65 @@ print('✅ Model imports successful!')
 "
 ```
 
+#### For Legacy Setup (Python 3.7.16):
+```bash
+# Run legacy verification script
+python verify_env_py37.py
+
+# Test PyTorch 1.8.0 installation
+python -c "import torch; print(f'PyTorch {torch.__version__} - CUDA: {torch.cuda.is_available()}')"
+```
+
+## 🎯 Choosing Your Setup
+
+### When to Use Modern Setup (Python 3.8+ & PyTorch 1.10+)
+- ✅ **New projects** and fresh installations
+- ✅ **Latest features** and performance optimizations
+- ✅ **Modern CUDA** versions (11.1+)
+- ✅ **Active development** with latest PyTorch features
+- ✅ **Better distributed training** with torchrun
+
+### When to Use Legacy Setup (Python 3.7.16 & PyTorch 1.8.0)
+- ✅ **Older systems** with CUDA 10.2/11.1
+- ✅ **Production environments** requiring specific versions
+- ✅ **Compatibility requirements** with existing infrastructure
+- ✅ **Reproducing results** from older research
+- ✅ **System constraints** preventing Python/PyTorch upgrades
+
 ## 🚀 Quick Start
 
 ### 1. Clone and Setup Environment
 
+#### Modern Setup (Recommended):
 ```bash
 # Clone the repository
 git clone <repository-url>
 cd sereact
 
-# Create and activate conda environment
+# Automated setup
+./setup_env.sh
+
+# Manual setup
 conda create -n sereact python=3.8 -y
 conda activate sereact
-
-# Install PyTorch with CUDA
 conda install pytorch torchvision pytorch-cuda=11.8 -c pytorch -c nvidia
-
-# Install dependencies
 pip install -r requirements.txt
+```
+
+#### Legacy Setup (Python 3.7.16):
+```bash
+# Clone the repository
+git clone <repository-url>
+cd sereact
+
+# Automated setup for Python 3.7.16
+./setup_env_py37.sh
+
+# Manual setup
+conda create -n sereact_py37 python=3.7.16 -y
+conda activate sereact_py37
+conda install pytorch==1.8.0 torchvision==0.9.0 cudatoolkit=10.2 -c pytorch
+pip install -r requirements_py37.txt
 ```
 
 ### 2. Prepare Dataset
@@ -184,12 +260,26 @@ model:
 
 ### 4. Start Training
 
+#### Modern Setup (Python 3.8+ & PyTorch 1.10+):
 ```bash
 # Single GPU training
 python main.py --cfg config/base_train.yaml --data-path /path/to/dataset
 
-# Multi-GPU distributed training
+# Multi-GPU distributed training (uses torchrun)
 bash train.sh
+# OR
+bash train_modern.sh
+```
+
+#### Legacy Setup (Python 3.7.16 & PyTorch 1.8.0):
+```bash
+# Single GPU training
+python main.py --cfg config/base_train.yaml --data-path /path/to/dataset --local_rank 0
+
+# Distributed training (uses torch.distributed.launch)
+bash train_py37.sh
+# OR
+bash train_legacy.sh
 ```
 
 ### 5. Monitor Training
@@ -374,6 +464,30 @@ python run_tests.py --file test_losses.py
 
 ### Common Environment Issues
 
+#### Setup-Specific Issues
+
+**Modern Setup Issues:**
+```bash
+# Error: "torchrun not found"
+# Solution: Upgrade PyTorch to 1.10+
+pip install torch>=1.10.0
+
+# Error: "FutureWarning: torch.distributed.launch is deprecated"
+# Solution: Use train.sh or train_modern.sh (uses torchrun)
+bash train.sh
+```
+
+**Legacy Setup Issues:**
+```bash
+# Error: "Package X requires Python >=3.8"
+# Solution: Use Python 3.7.16 compatible requirements
+pip install -r requirements_py37.txt
+
+# Error: "CUDA runtime version mismatch"
+# Solution: Reinstall PyTorch 1.8.0 with correct CUDA
+conda install pytorch==1.8.0 torchvision==0.9.0 cudatoolkit=10.2 -c pytorch
+```
+
 #### CUDA Extension Compilation Errors
 ```bash
 # Error: "Microsoft Visual C++ 14.0 is required" (Windows)
@@ -462,6 +576,31 @@ Run verification:
 ```bash
 python verify_env.py
 ```
+
+## 📊 Compatibility Matrix
+
+| Component | Modern Setup | Legacy Setup | Notes |
+|-----------|--------------|--------------|-------|
+| **Python** | 3.8 - 3.10 | 3.7.16 | Legacy uses exact version |
+| **PyTorch** | 1.10+ | 1.8.0 | Legacy is last Python 3.7 support |
+| **CUDA** | 11.1+ | 10.2, 11.1 | Legacy supports older CUDA |
+| **Distributed** | torchrun | torch.distributed.launch | Different launchers |
+| **Performance** | Baseline | -10-15% | Legacy slightly slower |
+| **Features** | Latest | Limited | Some features unavailable |
+| **Maintenance** | Active | Stable | Legacy for compatibility only |
+
+### Environment Files Reference
+
+| File | Purpose | Python Version |
+|------|---------|----------------|
+| `requirements.txt` | Modern setup dependencies | 3.8+ |
+| `requirements_py37.txt` | Legacy setup dependencies | 3.7.16 |
+| `setup_env.sh` | Modern environment setup | 3.8+ |
+| `setup_env_py37.sh` | Legacy environment setup | 3.7.16 |
+| `verify_env.py` | Modern verification script | 3.8+ |
+| `verify_env_py37.py` | Legacy verification script | 3.7.16 |
+| `train.sh` | Modern training (torchrun) | 3.8+ |
+| `train_py37.sh` | Legacy training (launch) | 3.7.16 |
 
 ## 🔧 Development
 

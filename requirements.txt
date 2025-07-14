@@ -19,6 +19,9 @@ opencv-python>=4.5.0
 # 3D Processing
 open3d>=0.15.0
 
+# Geometric Operations
+shapely>=1.8.0
+
 # Configuration Management
 yacs>=0.1.8
 PyYAML>=5.4.0
@@ -36,6 +39,9 @@ matplotlib>=3.3.0
 
 # Optimization & Training
 tqdm>=4.60.0
+
+# Terminal Output & Logging
+termcolor>=1.1.0
 
 # Development & Debugging (Optional)
 # seaborn>=0.11.0  # Only if you need advanced plotting
