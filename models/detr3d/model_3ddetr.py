@@ -534,7 +534,7 @@ class Model3DDETR(nn.Module):
         return torch.stack([u, v], dim=-1)  # (B, N, 2)
 
     def sample_rgb_features(self, rgb_feat, uv_coords):
-        B, C, H, W = rgb_feat.shape
+        _, _, H, W = rgb_feat.shape
         uv_norm = uv_coords.clone()
         uv_norm[..., 0] = (uv_coords[..., 0] / (W - 1)) * 2 - 1
         uv_norm[..., 1] = (uv_coords[..., 1] / (H - 1)) * 2 - 1
@@ -837,30 +837,7 @@ class Model3DDETR(nn.Module):
     #             encoder_features.permute(1, 2, 0)
     #         ).permute(2, 0, 1)
 
-    #         if encoder_only:
-    #             batch_predictions.append((encoder_xyz, encoder_features.transpose(0, 1)))
-    #             continue
 
-    #         point_cloud_dims = [pcd_dim_min, pcd_dim_max]
-
-    #         query_xyz, query_embeddings = self.get_query_embedding(encoder_xyz, point_cloud_dims)
-
-    #         encoder_pos = self.positional_embedding(encoder_xyz, input_range=point_cloud_dims).permute(2, 0, 1)
-    #         query_embeddings = query_embeddings.permute(2, 0, 1)
-    #         target = torch.zeros_like(query_embeddings)
-
-    #         box_features = self.decoder(
-    #             tgt=target,
-    #             memory=encoder_features,
-    #             query_pos=query_embeddings,
-    #             pos=encoder_pos
-    #         )[0]
-
-    #         box_predictions = self.get_box_prediction(query_xyz, point_cloud_dims, box_features)
-    #         batch_predictions.append(box_predictions)
-    #     # breakpoint
-    #     return batch_predictions
-    
     def forward(self, inputs_point_cloud, input_image, point_cloud_dims_min, point_cloud_dims_max, encoder_only=False):
 
         point_clouds = inputs_point_cloud
@@ -870,7 +847,7 @@ class Model3DDETR(nn.Module):
         if self.use_rgb_fusion:
             feats = self.fuse_rgb_with_points(xyz, feats, input_image)
 
-        xyz, features, indices = self.pre_encoder(xyz, feats)
+        xyz, features, _ = self.pre_encoder(xyz, feats)
         features = features.permute(2, 0, 1)
 
         enc_xyz, enc_features, _ = self.encoder(features, xyz=xyz)

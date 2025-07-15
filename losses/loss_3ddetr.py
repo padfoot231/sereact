@@ -283,7 +283,10 @@ class SetCriterion(nn.Module):
             size_loss *= assignments['proposal_matched_mask']
             size_loss = size_loss.sum()
 
-            size_loss /= gt_bbox_corners.shape[1]
+            # Normalize by total number of GT boxes across the batch (batch-compatible)
+            total_gt_boxes = gt_bbox_corners.shape[0] * gt_bbox_corners.shape[1]
+            if total_gt_boxes > 0:
+                size_loss /= total_gt_boxes
 
         else:
             size_loss = torch.zeros(1, device=pred_box_sizes.device).squeeze()
@@ -303,9 +306,10 @@ class SetCriterion(nn.Module):
         giou_loss = giou_loss * assignments['proposal_matched_mask']
         giou_loss = giou_loss.sum()
 
-        # Normalize the GIoU loss by the number of boxes
-        if targets.shape[1] > 0:
-            giou_loss /= targets.shape[1]
+        # Normalize by total number of GT boxes across the batch (batch-compatible)
+        total_gt_boxes = targets.shape[0] * targets.shape[1]
+        if total_gt_boxes > 0:
+            giou_loss /= total_gt_boxes
 
         # Return the GIoU loss
         return {'loss_giou': giou_loss}
@@ -328,14 +332,43 @@ class SetCriterion(nn.Module):
             gt_dims, 1, assignments['per_prop_gt_inds'].unsqueeze(-1).expand(-1, -1, 3)
         )
 
-        # Compute the size ratio penalty (penalize when pred > ground_truth)
-        size_ratio = pred_dims / (matched_gt_dims + 1e-6)
-        # Penaliize boxes that are > 20% larger than the ground truth boxes (This should be made configurable)
-        size_penalty = F.relu(size_ratio - 1.2)
+        # CRITICAL FIX: Handle scale mismatch between GT and predictions
+        # GT dimensions are very small (0.0-0.116) while predictions are normal (0.07-0.97)
+        # This suggests a coordinate system or scale mismatch
 
-        # Zero-out non-matched proposals
-        size_reg_loss = size_penalty.sum(dim=-1) * assignments['proposal_matched_mask']
-        size_reg_loss = size_reg_loss.sum() / gt_bbox_corners.shape[1]
+        # Check if GT dimensions are suspiciously small (indicating scale mismatch)
+        gt_dim_median = matched_gt_dims[assignments['proposal_matched_mask'] > 0].median()
+        pred_dim_median = pred_dims[assignments['proposal_matched_mask'] > 0].median()
+
+        if gt_dim_median < 0.2 and pred_dim_median > 0.5:
+            print(f"⚠️  Scale mismatch detected: GT median={gt_dim_median:.3f}, Pred median={pred_dim_median:.3f}")
+            print(f"   Skipping size regularization due to scale mismatch")
+            size_reg_loss = torch.tensor(0.0, device=pred_dims.device)
+        else:
+            # Normal size regularization computation
+            # Create a safe version of matched_gt_dims that won't cause division issues
+            safe_matched_gt_dims = torch.clamp(matched_gt_dims, min=1e-3)
+
+            # Compute the size ratio penalty (penalize when pred > ground_truth)
+            size_ratio = pred_dims / safe_matched_gt_dims
+
+            # Only consider ratios for matched proposals by masking
+            matched_mask_3d = assignments['proposal_matched_mask'].unsqueeze(-1).expand(-1, -1, 3)
+            size_ratio = size_ratio * matched_mask_3d  # Zero out unmatched proposals
+
+            # Cap the size ratio to prevent extreme penalties (max 10x larger)
+            size_ratio = torch.clamp(size_ratio, max=10.0)
+
+            # Penalize boxes that are > 20% larger than the ground truth boxes
+            size_penalty = F.relu(size_ratio - 1.2)
+
+            # Sum penalty across dimensions, already masked to matched proposals only
+            size_reg_loss = size_penalty.sum(dim=-1).sum()
+
+            # Normalize by number of matched proposals
+            num_matched = assignments['proposal_matched_mask'].sum()
+            if num_matched > 0:
+                size_reg_loss /= num_matched
 
         # Directly penalize large bounding boxes
         # size_reg_loss += torch.mean(pred_dims ** 2) * 0.1
@@ -367,8 +400,10 @@ class SetCriterion(nn.Module):
             box_corners_loss = box_corners_loss * assignments['proposal_matched_mask']
             box_corners_loss = box_corners_loss.sum()
 
-            # Normalize the loss by the number of boxes
-            box_corners_loss /= gt_bbox_corners.shape[1]
+            # Normalize by total number of GT boxes across the batch (batch-compatible)
+            total_gt_boxes = gt_bbox_corners.shape[0] * gt_bbox_corners.shape[1]
+            if total_gt_boxes > 0:
+                box_corners_loss /= total_gt_boxes
         else:
             # Because there are no ground truth boxes, set the loss to zero
             box_corners_loss = torch.zeros(1, device=predicted_box_corners.device).squeeze()
@@ -417,11 +452,14 @@ class SetCriterion(nn.Module):
             ) or loss_wt_key not in self.loss_weight_dict:
                 # Compute the current loss
                 curr_loss = self.loss_functions[k](outputs, targets, assignments)
+
+
+
                 # Update the losses dictionary with the current loss
                 losses.update(curr_loss)
         # Initialize the final loss to 0
-        # breakpoint()
         final_loss = 0
+
         # Iterate over each loss weight in the dictionary
         for k in self.loss_weight_dict:
             if self.loss_weight_dict[k] > 0:

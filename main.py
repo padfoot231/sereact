@@ -170,7 +170,7 @@ def main(config: Any) -> None:
             train_one_epoch(config, model, loss_module, iou_evaluator, data_loader_train, optimizer, epoch,scheduler,
                             loss_scaler)
 
-            miou, loss = validate(config, loss_module, epoch, iou_evaluator, data_loader_val, model)
+            miou, loss = validate(loss_module, epoch, iou_evaluator, data_loader_val, model)
             
             # if dist.get_rank() == 0 and (epoch % config.save_freq == 0 or epoch == (config.train.max_epoch - 1)):
             save_checkpoint(config, epoch, model_without_ddp, max_miou, miou, optimizer, scheduler, loss_scaler,
@@ -260,10 +260,10 @@ def train_one_epoch(
         # Compute losses
         pred_boxes = outputs['outputs']
         pred_boxes_aux = outputs['auxiliary_outputs']
-        loss, loss_dict, assignments = loss_module(pred_boxes, gt_bboxes)
+        loss, _, assignments = loss_module(pred_boxes, gt_bboxes)
         loss_aux = 0
         for aux in pred_boxes_aux:
-            loss_aux_cls, loss_dict_aux, assignments_aux = loss_module(aux, gt_bboxes)
+            loss_aux_cls, _, _ = loss_module(aux, gt_bboxes)
             loss_aux += loss_aux_cls
         total_loss = loss + 0.01 * loss_aux
         # breakpoint()
@@ -278,7 +278,6 @@ def train_one_epoch(
         loss_scale_value = loss_scaler.state_dict()["scale"]
         loss_meter.update(total_loss.item())
         
-        # breakpoint()
         predicted_bboxes_matched, gt_bboxes_matched = (
                 get_predicted_and_gt_boxes_from_assignments(
                     pred_boxes=pred_boxes, assignments=assignments, gt_bbox=gt_bboxes
@@ -287,7 +286,6 @@ def train_one_epoch(
 
         iou_evaluator.update(predicted_bboxes_matched, gt_bboxes_matched)
         torch.cuda.synchronize()
-        # breakpoint()
         if grad_norm is not None:  # loss_scaler return None if not update
             norm_meter.update(grad_norm)
         scaler_meter.update(loss_scale_value)
@@ -315,7 +313,7 @@ def train_one_epoch(
                     'train_miou': metric,
                 }
             )
-    metrics = iou_evaluator.compute_metrics()
+    _ = iou_evaluator.compute_metrics()
 
             
     epoch_time = time.time() - start
@@ -324,7 +322,6 @@ def train_one_epoch(
 
 @torch.no_grad()
 def validate(
-    config: Any,
     loss_module: LossFunction,
     epoch: int,
     iou_evaluator: IoUEvaluator,
@@ -336,7 +333,6 @@ def validate(
 
     batch_time = AverageMeter()
     loss_meter = AverageMeter()
-    miou_meter = AverageMeter()
 
     end = time.time()
     iou_evaluator.reset()
@@ -344,7 +340,6 @@ def validate(
     logger.info('Starting validation...')
 
     for _, batch_data in enumerate(data_loader):
-        start_time = time.time()
 
         # Move input data to the specified device
         # inputs = [obj.cuda() for obj in batch_data['pcd_tensor']]
@@ -377,7 +372,7 @@ def validate(
 
         # Compute loss (if criterion is provided)
         # if criterion:
-        loss, loss_dict, assignments = loss_module(outputs=pred_boxes, targets=gt_bboxes)
+        loss, _, assignments = loss_module(outputs=pred_boxes, targets=gt_bboxes)
 
         loss_meter.update(loss.item())
         if iou_evaluator:
@@ -423,7 +418,6 @@ def test_overfit_on_single_sample(
     scaler_meter = AverageMeter()
     
     count = 0  # Initialize counter
-    start = time.time()
     end = time.time()
     
     for batch_idx, single_batch in enumerate(data_loader):
@@ -448,7 +442,7 @@ def test_overfit_on_single_sample(
         gt_bbox = gt_bboxes[0]
         
         pred_boxes = output['outputs']
-        loss, loss_dict, assignments = loss_module(pred_boxes, gt_bbox)
+        loss, _, assignments = loss_module(pred_boxes, gt_bbox)
         
         is_second_order = hasattr(optimizer, 'is_second_order') and optimizer.is_second_order
         grad_norm = loss_scaler(loss, optimizer, clip_grad=config.train.clip_grad,
@@ -523,7 +517,6 @@ def get_predicted_and_gt_boxes_from_assignments(
             - predicted_bboxes_matched: List of [num_matched_i, 24] per batch
             - gt_bboxes_matched: List of [num_matched_i, 24] per batch
     """
-    # breakpoint()
     B = gt_bbox.shape[0]
     pred_key = next((k for k in ['box_corners', 'pred_boxes', 'boxes'] if k in pred_boxes), None)
     if pred_key is None:
