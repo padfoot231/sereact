@@ -329,7 +329,7 @@ class SetCriterion(nn.Module):
         )
 
         # Compute the size ratio penalty (penalize when pred > ground_truth)
-        size_ratio = pred_dims / matched_gt_dims + 1e-6
+        size_ratio = pred_dims / (matched_gt_dims + 1e-6)
         # Penaliize boxes that are > 20% larger than the ground truth boxes (This should be made configurable)
         size_penalty = F.relu(size_ratio - 1.2)
 
@@ -381,14 +381,14 @@ class SetCriterion(nn.Module):
         # Compute the Generalized Intersection over Union (GIoU) between predicted and ground truth boxes
         # NOTE: Here we have assumed that the boxes are not rotated.
         #       We also set needs_grad to False.
+        # breakpoint()
         gious = generalized_box3d_iou(
             outputs['box_corners'],
             targets,
-            nums_k2=torch.tensor([targets.shape[1]], device=outputs['box_corners'].device),
+            nums_k2=torch.tensor([targets.shape[0], targets.shape[1]], device=outputs['box_corners'].device),
             rotated_boxes=False,
             needs_grad=True,  # (self.loss_weight_dict["loss_giou_weight"] > 0)
         )
-
         # Store the GIoU in the outputs dictionary
         outputs['gious'] = gious
 
@@ -398,7 +398,7 @@ class SetCriterion(nn.Module):
             outputs["center_normalized"], targets["gt_box_centers_normalized"], p=1
         )
         # Store the center distances in the outputs dictionary
-        outputs["center_dist"] = center_dist
+        outputs["center_dist"] = center_diƒst
         """
 
         # Perform the matching between predictions and ground truth boxes
@@ -419,8 +419,8 @@ class SetCriterion(nn.Module):
                 curr_loss = self.loss_functions[k](outputs, targets, assignments)
                 # Update the losses dictionary with the current loss
                 losses.update(curr_loss)
-
         # Initialize the final loss to 0
+        # breakpoint()
         final_loss = 0
         # Iterate over each loss weight in the dictionary
         for k in self.loss_weight_dict:
@@ -454,6 +454,7 @@ class SetCriterion(nn.Module):
         # targets["num_boxes_replica"] = nactual_gt.sum().item()
 
         # Compute the loss and loss dictionary for the main outputs
+        # breakpoint()
         loss, loss_dict, assingments = self.single_output_forward(outputs, targets, epoch)
 
         # If there are auxiliary outputs, compute the loss for each of them

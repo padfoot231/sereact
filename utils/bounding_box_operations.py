@@ -405,7 +405,7 @@ def generalized_box3d_iou_tensor(
         gious *= mask
     return gious
 
-
+    # breakpoint()
 generalized_box3d_iou_tensor_jit = torch.jit.script(generalized_box3d_iou_tensor)
 
 
@@ -424,15 +424,12 @@ def generalized_box3d_iou(
             return generalized_box3d_iou_tensor_jit(
                 corners1, corners2, nums_k2, rotated_boxes, return_inter_vols_only
             )
-
     else:
         # Cythonized implementation of GIoU
         with torch.no_grad():
             return generalized_box3d_iou_cython(
                 corners1, corners2, nums_k2, rotated_boxes, return_inter_vols_only
             )
-
-
 def flip_axis_to_camera_tensor(pc: torch.Tensor) -> torch.Tensor:
     """Flip X-right, Y-forward, Z-up to X-right, Y-down, Z-forward."""
     pc2 = torch.clone(pc)

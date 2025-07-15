@@ -251,7 +251,6 @@ class PositionEmbeddingCoordsSine(nn.Module):
 
         bsize, npoints = xyz.shape[0], xyz.shape[1]
         d_out = num_channels // 2
-
         assert d_out <= self.gauss_B.shape[1]
         assert xyz.shape[-1] == self.gauss_B.shape[0]
 
@@ -716,7 +715,6 @@ class Model3DDETR(nn.Module):
         # query_xyz: (batch_size, num_queries, 3)
         # point_cloud_dims: [min, max] coordinates
         # box_features: (num_layers, num_queries, batch, channel)
-
         # Change box_features to ((num_layers x batch), channel, num_queries)
         box_features = box_features.permute(0, 2, 3, 1)
         num_layers, batch_size, channel, num_queries = box_features.shape
@@ -815,84 +813,97 @@ class Model3DDETR(nn.Module):
 
         return padded_pcs, attention_masks
 
-    def forward_batched(self, inputs_point_cloud, input_image, point_cloud_dims_min, point_cloud_dims_max, encoder_only=False):
-        """Optimized batched forward pass with padding and masking."""
-        batch_size = len(inputs_point_cloud)
+    # def forward(self, inputs_point_cloud, input_image, point_cloud_dims_min, point_cloud_dims_max, encoder_only=False):
+    #     """Main forward pass - can switch between batched and loop-based processing."""
+    #     # For now, keep the original loop-based approach for compatibility
+    #     # TODO: Switch to forward_batched once pre_encoder supports masking
 
-        # Pad point clouds to same size
-        padded_pcs, pc_masks = self.pad_point_clouds(inputs_point_cloud)
+    #     batch_predictions = []
 
-        # Process all point clouds at once
-        all_xyz = []
-        all_feats = []
+    #     for inputs_pcd, input_rgb, pcd_dim_min, pcd_dim_max in zip(inputs_point_cloud, input_image, point_cloud_dims_min, point_cloud_dims_max):
+    #         rgb = input_rgb
+    #         pc_tensor = inputs_pcd
 
-        for i in range(batch_size):
-            pc_tensor = padded_pcs[i][pc_masks[i]]  # Remove padding for processing
-            xyz, feats = self._break_up_pc(pc_tensor.unsqueeze(0))
+    #         xyz, feats = self._break_up_pc(pc_tensor.unsqueeze(0))
 
-            if self.use_rgb_fusion:
-                feats = self.fuse_rgb_with_points(xyz, feats, input_image[i].unsqueeze(0))
+    #         if self.use_rgb_fusion:
+    #             feats = self.fuse_rgb_with_points(xyz, feats, rgb.unsqueeze(0))
 
-            all_xyz.append(xyz.squeeze(0))
-            all_feats.append(feats.squeeze(0))
+    #         xyz, features, indices = self.pre_encoder(xyz, feats)
+    #         features = features.permute(2, 0, 1)
 
-        # Pad features after processing
-        padded_xyz, xyz_masks = self.pad_point_clouds(all_xyz)
-        padded_feats, feat_masks = self.pad_point_clouds(all_feats)
+    #         encoder_xyz, encoder_features, _ = self.encoder(features, xyz=xyz)
+    #         encoder_features = self.encoder_decoder_projection(
+    #             encoder_features.permute(1, 2, 0)
+    #         ).permute(2, 0, 1)
 
-        # Continue with batched processing...
-        # Note: This requires modifying pre_encoder to handle masks
+    #         if encoder_only:
+    #             batch_predictions.append((encoder_xyz, encoder_features.transpose(0, 1)))
+    #             continue
 
-        return self.forward_with_masks(padded_xyz, padded_feats, xyz_masks,
-                                     point_cloud_dims_min, point_cloud_dims_max, encoder_only)
+    #         point_cloud_dims = [pcd_dim_min, pcd_dim_max]
 
+    #         query_xyz, query_embeddings = self.get_query_embedding(encoder_xyz, point_cloud_dims)
+
+    #         encoder_pos = self.positional_embedding(encoder_xyz, input_range=point_cloud_dims).permute(2, 0, 1)
+    #         query_embeddings = query_embeddings.permute(2, 0, 1)
+    #         target = torch.zeros_like(query_embeddings)
+
+    #         box_features = self.decoder(
+    #             tgt=target,
+    #             memory=encoder_features,
+    #             query_pos=query_embeddings,
+    #             pos=encoder_pos
+    #         )[0]
+
+    #         box_predictions = self.get_box_prediction(query_xyz, point_cloud_dims, box_features)
+    #         batch_predictions.append(box_predictions)
+    #     # breakpoint
+    #     return batch_predictions
+    
     def forward(self, inputs_point_cloud, input_image, point_cloud_dims_min, point_cloud_dims_max, encoder_only=False):
-        """Main forward pass - can switch between batched and loop-based processing."""
-        # For now, keep the original loop-based approach for compatibility
-        # TODO: Switch to forward_batched once pre_encoder supports masking
 
-        batch_predictions = []
+        point_clouds = inputs_point_cloud
 
-        for inputs_pcd, input_rgb, pcd_dim_min, pcd_dim_max in zip(inputs_point_cloud, input_image, point_cloud_dims_min, point_cloud_dims_max):
-            rgb = input_rgb
-            pc_tensor = inputs_pcd
+        xyz, feats = self._break_up_pc(point_clouds)
 
-            xyz, feats = self._break_up_pc(pc_tensor.unsqueeze(0))
+        if self.use_rgb_fusion:
+            feats = self.fuse_rgb_with_points(xyz, feats, input_image)
 
-            if self.use_rgb_fusion:
-                feats = self.fuse_rgb_with_points(xyz, feats, rgb.unsqueeze(0))
+        xyz, features, indices = self.pre_encoder(xyz, feats)
+        features = features.permute(2, 0, 1)
 
-            xyz, features, indices = self.pre_encoder(xyz, feats)
-            features = features.permute(2, 0, 1)
+        enc_xyz, enc_features, _ = self.encoder(features, xyz=xyz)
 
-            encoder_xyz, encoder_features, _ = self.encoder(features, xyz=xyz)
-            encoder_features = self.encoder_decoder_projection(
-                encoder_features.permute(1, 2, 0)
-            ).permute(2, 0, 1)
+        enc_features = self.encoder_decoder_projection(
+            enc_features.permute(1, 2, 0)
+        ).permute(2, 0, 1)
+        # encoder features: npoints x batch x channel
+        # encoder xyz: npoints x batch x 3
 
-            if encoder_only:
-                batch_predictions.append((encoder_xyz, encoder_features.transpose(0, 1)))
-                continue
+        if encoder_only:
+            # return: batch x npoints x channels
+            return enc_xyz, enc_features.transpose(0, 1)
 
-            point_cloud_dims = [pcd_dim_min, pcd_dim_max]
+        point_cloud_dims = [
+            point_cloud_dims_min,
+            point_cloud_dims_max,
+        ]
+        query_xyz, query_embed = self.get_query_embedding(enc_xyz, point_cloud_dims)
+        # query_embed: batch x channel x npoint
+        enc_pos = self.positional_embedding(enc_xyz, input_range=point_cloud_dims)
 
-            query_xyz, query_embeddings = self.get_query_embedding(encoder_xyz, point_cloud_dims)
-
-            encoder_pos = self.positional_embedding(encoder_xyz, input_range=point_cloud_dims).permute(2, 0, 1)
-            query_embeddings = query_embeddings.permute(2, 0, 1)
-            target = torch.zeros_like(query_embeddings)
-
-            box_features = self.decoder(
-                tgt=target,
-                memory=encoder_features,
-                query_pos=query_embeddings,
-                pos=encoder_pos
-            )[0]
-
-            box_predictions = self.get_box_prediction(query_xyz, point_cloud_dims, box_features)
-            batch_predictions.append(box_predictions)
-        return batch_predictions
-
+        # decoder expects: npoints x batch x channel
+        enc_pos = enc_pos.permute(2, 0, 1)
+        query_embed = query_embed.permute(2, 0, 1)
+        tgt = torch.zeros_like(query_embed)
+        box_features = self.decoder(
+            tgt, enc_features, query_pos=query_embed, pos=enc_pos
+        )[0]
+        box_predictions = self.get_box_prediction(
+            query_xyz, point_cloud_dims, box_features
+        )
+        return box_predictions
 
 # Function to build pre_encoder
 def build_preencoder(config) -> PointnetSAModuleVotes:

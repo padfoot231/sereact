@@ -16,7 +16,7 @@ import torch.distributed as dist
 from torch.utils.data import Dataset, DataLoader
 from torchvision import datasets, transforms
 from .samplers import SubsetRandomSampler
-from utils.miscellaneous import collate_fn, worker_init_fn
+from utils.miscellaneous import collate_variable_3d_batch_nomask, worker_init_fn
 from .sereact_data_loader import SereactDataloader
 from .augmentations import SereactAugmentation
 
@@ -84,7 +84,7 @@ def build_loader(config: Any) -> Tuple[Dataset, Dataset, DataLoader, DataLoader]
         dataset_train, sampler=sampler_train,
         batch_size=config.data.batch_size,
         shuffle=False,
-        collate_fn=collate_fn,
+        collate_fn=collate_variable_3d_batch_nomask,
         num_workers=config.data.num_workers,
         pin_memory=config.data.pin_memory,
         worker_init_fn=worker_init_fn,
@@ -96,7 +96,7 @@ def build_loader(config: Any) -> Tuple[Dataset, Dataset, DataLoader, DataLoader]
         shuffle=False,
         num_workers=config.data.num_workers,
         pin_memory=config.data.pin_memory,
-        collate_fn=collate_fn,
+        collate_fn=collate_variable_3d_batch_nomask,
     )
     # setup mixup / cutmix
     # mixup_fn = None

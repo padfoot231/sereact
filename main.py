@@ -46,7 +46,7 @@ from utils.model_utils import (
     load_checkpoint,
     NativeScalerWithGradNormCount
 )
-from utils.low_precision_conversion import convert_model_to_low_precision
+# from utils.low_precision_conversion import convert_model_to_low_precision
 
 # Initialize Wandb for experiment tracking
 wandb.init(project="sereact project", entity='padfoot')
@@ -136,17 +136,17 @@ def main(config: Any) -> None:
     iou_evaluator = IoUEvaluator()
 
     max_miou = 0.0
-    if config.model.export_model:
-        # breakpoint()
-        logger.info('Start of conversion to low precision formats')
-        try:
-            convert_model_to_low_precision(config, model_without_ddp, torch.device('cuda'))
-            logger.info('Model conversion successful')
-        except ImportError:
-            logger.warning('Low precision conversion module not available. Skipping model export.')
-        except Exception as e:
-            logger.error(f'Model conversion failed: {e}')
-        return
+    # if config.model.export_model:
+    #     # breakpoint()
+    #     logger.info('Start of conversion to low precision formats')
+    #     try:
+    #         convert_model_to_low_precision(config, model_without_ddp, torch.device('cuda'))
+    #         logger.info('Model conversion successful')
+    #     except ImportError:
+    #         logger.warning('Low precision conversion module not available. Skipping model export.')
+    #     except Exception as e:
+    #         logger.error(f'Model conversion failed: {e}')
+    #     return
 
     if config.model.resume:
         max_miou = load_checkpoint(config, model_without_ddp, optimizer, scheduler, loss_scaler, logger)
@@ -222,11 +222,16 @@ def train_one_epoch(
 
     for batch_idx, batch in enumerate(data_loader):
         # Move input data to GPU
-        inputs = [obj.cuda() for obj in batch['pcd_tensor']]
-        inputs_rgb = [obj.cuda() for obj in batch['rgb_tensor']]
-        gt_bboxes = [obj.cuda() for obj in batch['bbox3d_tensor']]
-        pcd_dims_min = [obj.cuda() for obj in batch['point_cloud_dims_min']]
-        pcd_dims_max = [obj.cuda() for obj in batch['point_cloud_dims_max']]
+        # inputs = [obj.cuda() for obj in batch['pcd_tensor']]
+        # inputs_rgb = [obj.cuda() for obj in batch['rgb_tensor']]
+        # gt_bboxes = [obj.cuda() for obj in batch['bbox3d_tensor']]
+        # pcd_dims_min = [obj.cuda() for obj in batch['point_cloud_dims_min']]
+        # pcd_dims_max = [obj.cuda() for obj in batch['point_cloud_dims_max']]
+        inputs = batch['pcd_tensor'].cuda()
+        inputs_rgb = batch['rgb_tensor'].cuda()
+        gt_bboxes = batch['bbox3d_tensor'].cuda()
+        pcd_dims_min = batch['point_cloud_dims_min'].cuda()
+        pcd_dims_max = batch['point_cloud_dims_max'].cuda()
         torch.autograd.set_detect_anomaly(True)
 
         try:
@@ -251,22 +256,19 @@ def train_one_epoch(
                 )
             else:
                 raise e
-
-        output = outputs[0]
-        gt_bbox = gt_bboxes[0]
+        # output = outputs[0]
+        # gt_bbox = gt_bboxes[0]
 
         # Compute losses
-        pred_boxes = output['outputs']
-        pred_boxes_aux = output['auxiliary_outputs']
-        loss, loss_dict, assignments = loss_module(pred_boxes, gt_bbox)
-
+        pred_boxes = outputs['outputs']
+        pred_boxes_aux = outputs['auxiliary_outputs']
+        loss, loss_dict, assignments = loss_module(pred_boxes, gt_bboxes)
         loss_aux = 0
         for aux in pred_boxes_aux:
-            loss_aux_cls, loss_dict_aux, assignments_aux = loss_module(aux, gt_bbox)
+            loss_aux_cls, loss_dict_aux, assignments_aux = loss_module(aux, gt_bboxes)
             loss_aux += loss_aux_cls
-
         total_loss = loss + 0.01 * loss_aux
-
+        breakpoint()
         is_second_order = hasattr(optimizer, 'is_second_order') and optimizer.is_second_order
         grad_norm = loss_scaler(total_loss, optimizer, clip_grad=config.train.clip_grad,
                                 parameters=model.parameters(), create_graph=is_second_order,
@@ -278,14 +280,14 @@ def train_one_epoch(
         loss_scale_value = loss_scaler.state_dict()["scale"]
         loss_meter.update(total_loss.item())
         
-
+        # breakpoint()
         predicted_bboxes_matched, gt_bboxes_matched = (
                 get_predicted_and_gt_boxes_from_assignments(
-                    pred_boxes=pred_boxes, assignments=assignments, gt_bbox=gt_bbox
+                    pred_boxes=pred_boxes, assignments=assignments, gt_bbox=gt_bboxes
                 )
             )
 
-        iou_evaluator.update(predicted_bboxes_matched, gt_bboxes_matched)
+        # iou_evaluator.update(predicted_bboxes_matched, gt_bboxes_matched)
         torch.cuda.synchronize()
 
         if grad_norm is not None:  # loss_scaler return None if not update
@@ -347,11 +349,17 @@ def validate(
         start_time = time.time()
 
         # Move input data to the specified device
-        inputs = [obj.cuda() for obj in batch_data['pcd_tensor']]
-        gt_bboxes = [obj.cuda() for obj in batch_data['bbox3d_tensor']]
-        inputs_rgb = [obj.cuda() for obj in batch_data['rgb_tensor']]
-        pcd_dims_min = [obj.cuda() for obj in batch_data['point_cloud_dims_min']]
-        pcd_dims_max = [obj.cuda() for obj in batch_data['point_cloud_dims_max']]
+        # inputs = [obj.cuda() for obj in batch_data['pcd_tensor']]
+        # gt_bboxes = [obj.cuda() for obj in batch_data['bbox3d_tensor']]
+        # inputs_rgb = [obj.cuda() for obj in batch_data['rgb_tensor']]
+        # pcd_dims_min = [obj.cuda() for obj in batch_data['point_cloud_dims_min']]
+        # pcd_dims_max = [obj.cuda() for obj in batch_data['point_cloud_dims_max']]
+
+        inputs = batch_data['pcd_tensor'].cuda()
+        gt_bboxes = batch_data['bbox3d_tensor'].cuda()
+        inputs_rgb = batch_data['rgb_tensor'].cuda()
+        pcd_dims_min = batch_data['point_cloud_dims_min'].cuda()
+        pcd_dims_max = batch_data['point_cloud_dims_max'].cuda()
 
         # Forward pass
         # inputs = {"point_clouds": batch_data["pcd"]}
@@ -363,21 +371,21 @@ def validate(
         )
 
         # Unpack the output from the list
-        output = outputs[0]
-        gt_bbox = gt_bboxes[0]
+        # output = outputs[0]
+        # gt_bbox = gt_bboxes[0]
 
         # Get predictions
-        pred_boxes = output['outputs']
+        pred_boxes = outputs['outputs']
 
         # Compute loss (if criterion is provided)
         # if criterion:
-        loss, loss_dict, assignments = loss_module(outputs=pred_boxes, targets=gt_bbox)
+        loss, loss_dict, assignments = loss_module(outputs=pred_boxes, targets=gt_bboxes)
 
         loss_meter.update(loss.item())
         if iou_evaluator:
             predicted_bboxes_matched, gt_bboxes_matched = (
                 get_predicted_and_gt_boxes_from_assignments(
-                    pred_boxes=pred_boxes, assignments=assignments, gt_bbox=gt_bbox
+                    pred_boxes=pred_boxes, assignments=assignments, gt_bbox=gt_bboxes
                 )
             )
         iou_evaluator.update(predicted_bboxes_matched, gt_bboxes_matched)
