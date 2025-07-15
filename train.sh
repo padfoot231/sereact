@@ -17,7 +17,7 @@ export CUDNN_DETERMINISTIC=1
 
 
 python -m torch.distributed.launch \
---nproc_per_node 1 \
+--nproc_per_node 3 \
 --master_port 12346  main.py \
 --cfg config/base_train.yaml \
 --output /home-local2/akath.extra.nobkp/sereact \

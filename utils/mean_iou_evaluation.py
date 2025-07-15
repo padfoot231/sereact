@@ -63,6 +63,7 @@ class IoUEvaluator:
         # ground_truth_polygon = Polygon(box_b[:, :2])
 
         # Project to 2D and compute convex hull for each box
+        # breakpoint()
         def get_convex_hull(box: np.ndarray) -> MultiPoint:
             points = box[:, :2]
             multipoint = MultiPoint(points)

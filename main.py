@@ -256,8 +256,6 @@ def train_one_epoch(
                 )
             else:
                 raise e
-        # output = outputs[0]
-        # gt_bbox = gt_bboxes[0]
 
         # Compute losses
         pred_boxes = outputs['outputs']
@@ -268,7 +266,7 @@ def train_one_epoch(
             loss_aux_cls, loss_dict_aux, assignments_aux = loss_module(aux, gt_bboxes)
             loss_aux += loss_aux_cls
         total_loss = loss + 0.01 * loss_aux
-        breakpoint()
+        # breakpoint()
         is_second_order = hasattr(optimizer, 'is_second_order') and optimizer.is_second_order
         grad_norm = loss_scaler(total_loss, optimizer, clip_grad=config.train.clip_grad,
                                 parameters=model.parameters(), create_graph=is_second_order,
@@ -287,9 +285,9 @@ def train_one_epoch(
                 )
             )
 
-        # iou_evaluator.update(predicted_bboxes_matched, gt_bboxes_matched)
+        iou_evaluator.update(predicted_bboxes_matched, gt_bboxes_matched)
         torch.cuda.synchronize()
-
+        # breakpoint()
         if grad_norm is not None:  # loss_scaler return None if not update
             norm_meter.update(grad_norm)
         scaler_meter.update(loss_scale_value)
@@ -507,36 +505,65 @@ def test_overfit_on_single_sample(
 
 
 def get_predicted_and_gt_boxes_from_assignments(
-        pred_boxes: dict, assignments: dict, gt_bbox: torch.Tensor
-    ) -> tuple:
-        """
-        Extracts matched predicted and ground truth bounding boxes based on assignments.
+    pred_boxes: dict,
+    assignments: dict,
+    gt_bbox: torch.Tensor
+) -> tuple:
+    """
+    Extracts matched predicted and ground truth bounding boxes across the entire batch.
 
-        Args:
-            pred_boxes (dict): Dictionary containing predicted bounding boxes.
-            assignments (dict): Dictionary containing assignment indices.
-            gt_bbox (torch.Tensor): Ground truth bounding boxes.
+    Args:
+        pred_boxes (dict): Dict containing predicted boxes with key 'box_corners' or similar.
+            Shape: [B, N_pred, 8, 3]
+        assignments (dict): Dict with 'assignments' as a list of (pred_idx, gt_idx) tuples per batch.
+        gt_bbox (Tensor): Ground truth boxes [B, N_gt, 8, 3]
 
-        Returns:
-            tuple: Matched predicted and ground truth bounding boxes.
-        """
-        # Get the predicted and gt indices
-        matched_predicted_indices = assignments['assignments'][0][0]
-        matched_gt_indices = assignments['assignments'][0][1]
+    Returns:
+        Tuple of:
+            - predicted_bboxes_matched: List of [num_matched_i, 24] per batch
+            - gt_bboxes_matched: List of [num_matched_i, 24] per batch
+    """
+    # breakpoint()
+    B = gt_bbox.shape[0]
+    pred_key = next((k for k in ['box_corners', 'pred_boxes', 'boxes'] if k in pred_boxes), None)
+    if pred_key is None:
+        raise ValueError("No valid prediction key found in pred_boxes")
 
-        # Move to CPU
-        matched_predicted_indices = matched_predicted_indices.cpu().detach().numpy()
-        matched_gt_indices = matched_gt_indices.cpu().detach().numpy()
+    predicted_batched = []
+    gt_batched = []
 
-        # Index-slicing to get matched boxes
-        predicted_bboxes_matched = pred_boxes['box_corners'][0, matched_predicted_indices]
-        gt_bboxes_matched = gt_bbox[matched_gt_indices]
+    for b in range(B):
+        pred_idx = assignments['assignments'][b][0]
+        gt_idx = assignments['assignments'][b][1]
 
-        # Move to CPU
-        predicted_bboxes_matched = predicted_bboxes_matched.cpu().detach().numpy()
-        gt_bboxes_matched = gt_bboxes_matched.cpu().detach().numpy()
+        pred_tensor = pred_boxes[pred_key][b]  # [N_pred, 8, 3]
+        gt_tensor = gt_bbox[b]                 # [N_gt, 8, 3]
 
-        return predicted_bboxes_matched, gt_bboxes_matched
+        max_pred = pred_tensor.shape[0] - 1
+        max_gt = gt_tensor.shape[0] - 1
+
+        # Filter valid indices
+        pred_idx_np = pred_idx.cpu().numpy()
+        gt_idx_np = gt_idx.cpu().numpy()
+
+        valid_pred_mask = pred_idx_np <= max_pred
+        valid_gt_mask = gt_idx_np <= max_gt
+        valid_mask = valid_pred_mask & valid_gt_mask
+
+        if valid_mask.sum() > 0:
+            pred_idx_valid = pred_idx[valid_mask]
+            gt_idx_valid = gt_idx[valid_mask]
+
+            matched_preds = pred_tensor[pred_idx_valid].reshape(-1, 24)  # [num, 24]
+            matched_gts = gt_tensor[gt_idx_valid].reshape(-1, 24)
+
+            predicted_batched.append(matched_preds.detach().cpu().numpy())
+            gt_batched.append(matched_gts.cpu().numpy())
+        else:
+            predicted_batched.append(np.empty((0, 24)))
+            gt_batched.append(np.empty((0, 24)))
+
+    return predicted_batched, gt_batched
 
 
 if __name__ == '__main__':
