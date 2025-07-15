@@ -332,43 +332,31 @@ class SetCriterion(nn.Module):
             gt_dims, 1, assignments['per_prop_gt_inds'].unsqueeze(-1).expand(-1, -1, 3)
         )
 
-        # CRITICAL FIX: Handle scale mismatch between GT and predictions
-        # GT dimensions are very small (0.0-0.116) while predictions are normal (0.07-0.97)
-        # This suggests a coordinate system or scale mismatch
+        # FIXED: Scale mismatch resolved - now GT and predictions use same normalization
 
-        # Check if GT dimensions are suspiciously small (indicating scale mismatch)
-        gt_dim_median = matched_gt_dims[assignments['proposal_matched_mask'] > 0].median()
-        pred_dim_median = pred_dims[assignments['proposal_matched_mask'] > 0].median()
+        # Create a safe version of matched_gt_dims that won't cause division issues
+        safe_matched_gt_dims = torch.clamp(matched_gt_dims, min=1e-3)
 
-        if gt_dim_median < 0.2 and pred_dim_median > 0.5:
-            print(f"⚠️  Scale mismatch detected: GT median={gt_dim_median:.3f}, Pred median={pred_dim_median:.3f}")
-            print(f"   Skipping size regularization due to scale mismatch")
-            size_reg_loss = torch.tensor(0.0, device=pred_dims.device)
-        else:
-            # Normal size regularization computation
-            # Create a safe version of matched_gt_dims that won't cause division issues
-            safe_matched_gt_dims = torch.clamp(matched_gt_dims, min=1e-3)
+        # Compute the size ratio penalty (penalize when pred > ground_truth)
+        size_ratio = pred_dims / safe_matched_gt_dims
 
-            # Compute the size ratio penalty (penalize when pred > ground_truth)
-            size_ratio = pred_dims / safe_matched_gt_dims
+        # Only consider ratios for matched proposals by masking
+        matched_mask_3d = assignments['proposal_matched_mask'].unsqueeze(-1).expand(-1, -1, 3)
+        size_ratio = size_ratio * matched_mask_3d  # Zero out unmatched proposals
 
-            # Only consider ratios for matched proposals by masking
-            matched_mask_3d = assignments['proposal_matched_mask'].unsqueeze(-1).expand(-1, -1, 3)
-            size_ratio = size_ratio * matched_mask_3d  # Zero out unmatched proposals
+        # Cap the size ratio to prevent extreme penalties (max 5x larger is reasonable)
+        size_ratio = torch.clamp(size_ratio, max=5.0)
 
-            # Cap the size ratio to prevent extreme penalties (max 10x larger)
-            size_ratio = torch.clamp(size_ratio, max=10.0)
+        # Penalize boxes that are > 20% larger than the ground truth boxes
+        size_penalty = F.relu(size_ratio - 1.2)
 
-            # Penalize boxes that are > 20% larger than the ground truth boxes
-            size_penalty = F.relu(size_ratio - 1.2)
+        # Sum penalty across dimensions, already masked to matched proposals only
+        size_reg_loss = size_penalty.sum(dim=-1).sum()
 
-            # Sum penalty across dimensions, already masked to matched proposals only
-            size_reg_loss = size_penalty.sum(dim=-1).sum()
-
-            # Normalize by number of matched proposals
-            num_matched = assignments['proposal_matched_mask'].sum()
-            if num_matched > 0:
-                size_reg_loss /= num_matched
+        # Normalize by number of matched proposals
+        num_matched = assignments['proposal_matched_mask'].sum()
+        if num_matched > 0:
+            size_reg_loss /= num_matched
 
         # Directly penalize large bounding boxes
         # size_reg_loss += torch.mean(pred_dims ** 2) * 0.1

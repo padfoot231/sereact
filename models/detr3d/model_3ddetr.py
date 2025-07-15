@@ -330,23 +330,40 @@ class BoxProcessor:
         return center_normalized, center_unnormalized
 
     def compute_predicted_size(
-        self, size_unnormalized: torch.Tensor, point_cloud_dims: List[torch.Tensor]
+        self, size_normalized: torch.Tensor, point_cloud_dims: List[torch.Tensor]
     ) -> torch.Tensor:
         """
         Compute the predicted size of the bounding box.
 
+        FIXED: Now uses the same scaling as GT bboxes (max distance from center)
+        instead of coordinate range (max - min).
+
         Args:
-            size_unnormalized (Tensor): Unnormalized size of the bounding box.
+            size_normalized (Tensor): Normalized size of the bounding box [0, 1].
             point_cloud_dims (list of Tensor): Dimensions of the point cloud as [min, max] coordinates.
 
         Returns:
-            Tensor: Normalized size of the bounding box.
+            Tensor: Unnormalized size of the bounding box.
         """
-        # Normalize the size by shift scaling
-        scene_scale = point_cloud_dims[1] - point_cloud_dims[0]
-        # Clamp the size to be within the scene scale
-        scene_scale = torch.clamp(scene_scale, min=1e-1)
-        size_unnormalized = scale_points(size_unnormalized, scene_scale)
+        # CRITICAL FIX: Use the same scaling factor as GT normalization
+        # GT normalization in dataloader: bbox_normalized = (bbox - centroid) / max_distance
+        # So we need: bbox_unnormalized = bbox_normalized * max_distance
+
+        # For a normalized point cloud (centered and scaled), the max distance from center
+        # should be approximately 1.0, but let's compute it to be exact
+
+        # Compute max distance from center to any corner of the bounding box of the point cloud
+        # This approximates the max_distance used in GT normalization
+        half_extents = (point_cloud_dims[1] - point_cloud_dims[0]) / 2  # [B, 3]
+        max_distance = torch.norm(half_extents, dim=-1)  # [B] - distance to corner
+
+        # Clamp to prevent division issues
+        max_distance = torch.clamp(max_distance, min=1e-3)
+
+        # Scale the normalized size by the max distance (same as GT)
+        # max_distance is [B], but scale_points expects [B, 3] for broadcasting
+        max_distance_3d = max_distance.unsqueeze(-1).expand(-1, 3)  # [B, 3]
+        size_unnormalized = scale_points(size_normalized, max_distance_3d)
 
         return size_unnormalized
 
