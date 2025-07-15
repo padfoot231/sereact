@@ -46,7 +46,7 @@ from utils.model_utils import (
     load_checkpoint,
     NativeScalerWithGradNormCount
 )
-# from utils.low_precision_conversion import convert_model_to_low_precision
+from utils.low_precision_conversion import convert_model_to_low_precision
 
 # Initialize Wandb for experiment tracking
 wandb.init(project="sereact project", entity='padfoot')
@@ -79,6 +79,8 @@ def parse_option() -> Tuple[argparse.Namespace, Any]:
     parser.add_argument('--eval', action='store_true', help='Perform evaluation only')
     parser.add_argument('--unit_test', action='store_true', help='Test throughput only')
     parser.add_argument('--base_lr', type=float , help="base learning rate")
+    parser.add_argument('--export', type=bool , help="Deploying the model")
+    parser.add_argument('--augment', type=bool , help="Data augmentation")
 
     # distributed training
     parser.add_argument("--local_rank", type=int, required=True, help='local rank for DistributedDataParallel')
@@ -136,17 +138,17 @@ def main(config: Any) -> None:
     iou_evaluator = IoUEvaluator()
 
     max_miou = 0.0
-    # if config.model.export_model:
-    #     # breakpoint()
-    #     logger.info('Start of conversion to low precision formats')
-    #     try:
-    #         convert_model_to_low_precision(config, model_without_ddp, torch.device('cuda'))
-    #         logger.info('Model conversion successful')
-    #     except ImportError:
-    #         logger.warning('Low precision conversion module not available. Skipping model export.')
-    #     except Exception as e:
-    #         logger.error(f'Model conversion failed: {e}')
-    #     return
+    if config.model.export_model:
+        # breakpoint()
+        logger.info('Start of conversion to low precision formats')
+        try:
+            convert_model_to_low_precision(config, model_without_ddp, torch.device('cuda'))
+            logger.info('Model conversion successful')
+        except ImportError:
+            logger.warning('Low precision conversion module not available. Skipping model export.')
+        except Exception as e:
+            logger.error(f'Model conversion failed: {e}')
+        return
 
     if config.model.resume:
         max_miou = load_checkpoint(config, model_without_ddp, optimizer, scheduler, loss_scaler, logger)

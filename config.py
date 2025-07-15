@@ -24,7 +24,7 @@ _C = CN()
 # GENERAL SETTINGS
 # =============================================================================
 _C.base = ['']                    # Base configuration files to inherit from
-_C.tag = '123'                    # Experiment tag for identification
+_C.tag = 'no_augmenation'                    # Experiment tag for identification
 _C.AMP_ENABLE = True             # Enable Automatic Mixed Precision training
 # =============================================================================
 # DATA CONFIGURATION
@@ -199,8 +199,12 @@ def update_config(config: CN, args: argparse.Namespace) -> None:
         config.data.batch_size = args.batch_size
     if args.data_path:
         config.data.data_path = args.data_path
+    if args.augment:
+        config.data.augment = args.augment
     if args.pretrained:
         config.model.pretrained = args.pretrained
+    if args.export: 
+        config.model.export_model = args.export
     if args.resume:
         config.model.resume = args.resume
     if args.accumulation_steps:

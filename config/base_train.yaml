@@ -1,4 +1,5 @@
 seed: 40
+tag: "no_augmentation"
 
 train:
   start_epoch: 0
@@ -38,7 +39,7 @@ model:
   num_queries: 256
   num_angular_bins: 1
   pretrained_weights_path: "/home-local2/akath.extra.nobkp/scannet_ep1080.pth"
-  export_model: True
+  export_model: False
 
 loss:
   matcher_costs:

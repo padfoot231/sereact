@@ -62,8 +62,7 @@ def save_checkpoint(
     }
 
     if miou > max_miou:
-        print(epoch)
-        save_path = os.path.join(config.output, f'ckpt_epoch_best_new_resume.pth')
+        save_path = os.path.join(config.output, f'ckpt_best.pth')
         logger.info(f"{save_path} saving......")
         torch.save(save_state, save_path)
         logger.info(f"{save_path} saved !!!")

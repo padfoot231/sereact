@@ -38,13 +38,6 @@ def shift_scale_points(pred_xyz, src_range, dst_range=None):
         src_range = [x[:, None] for x in src_range]
         dst_range = [x[:, None] for x in dst_range]
 
-    assert src_range[0].shape[0] == pred_xyz.shape[0]
-    assert dst_range[0].shape[0] == pred_xyz.shape[0]
-    assert src_range[0].shape[-1] == pred_xyz.shape[-1]
-    assert src_range[0].shape == src_range[1].shape
-    assert dst_range[0].shape == dst_range[1].shape
-    assert src_range[0].shape == dst_range[1].shape
-
     src_diff = src_range[1][:, None, :] - src_range[0][:, None, :]
     dst_diff = dst_range[1][:, None, :] - dst_range[0][:, None, :]
     prop_xyz = (
@@ -74,9 +67,8 @@ def farthest_point_sample(xyz: torch.Tensor, npoint: int) -> torch.Tensor:
     B, N, C = xyz.shape
     centroids = torch.zeros(B, npoint, dtype=torch.long).to(device)  # Initialize centroids
     distance = torch.ones(B, N).to(device) * 1e10  # Initialize distances to a large value
-    farthest = torch.randint(0, N, (B,), dtype=torch.long).to(
-        device
-    )  # Randomly select the first point
+    # ONNX-compatible: use fixed starting point instead of random
+    farthest = torch.zeros(B, dtype=torch.long).to(device)  # Always start from point 0
     batch_indices = torch.arange(B, dtype=torch.long).to(device)  # Batch indices for indexing
 
     for i in range(npoint):

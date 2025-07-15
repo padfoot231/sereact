@@ -84,6 +84,137 @@ print(f'CUDA available: {torch.cuda.is_available()}')
 "
 ```
 
+### 5. TensorRT Installation (For Model Conversion)
+
+TensorRT is required for converting trained models to optimized inference engines. Follow these steps for Python 3.7 and PyTorch 1.8.0 compatibility:
+
+#### Download and Install TensorRT
+
+```bash
+# Download TensorRT 8.2.1.8 from NVIDIA Developer website
+# Navigate to TensorRT Python directory
+cd TensorRT-8.2.1.8/python
+
+# Install the wheel for Python 3.7
+pip install tensorrt-8.2.1.8-cp37-none-linux_x86_64.whl
+```
+
+#### Common Installation Issues & Fixes
+
+**Issue 1: `ImportError: libcudnn.so.8: cannot open shared object file`**
+
+This occurs when TensorRT can't find cuDNN libraries. Fix by adding PyTorch's CUDA libraries:
+
+```bash
+# Temporary fix (current session)
+export LD_LIBRARY_PATH=/usr/lib/python3/dist-packages/torch/lib:$LD_LIBRARY_PATH
+
+# Permanent fix (add to ~/.bashrc)
+echo 'export LD_LIBRARY_PATH=/usr/lib/python3/dist-packages/torch/lib:$LD_LIBRARY_PATH' >> ~/.bashrc
+source ~/.bashrc
+```
+
+**Issue 2: `ImportError: libnvinfer.so.8: cannot open shared object file`**
+
+Add TensorRT libraries to your library path:
+
+```bash
+# Replace /path/to/ with your actual TensorRT installation path
+export LD_LIBRARY_PATH=/path/to/TensorRT-8.2.1.8/lib:$LD_LIBRARY_PATH
+
+# Make permanent
+echo 'export LD_LIBRARY_PATH=/path/to/TensorRT-8.2.1.8/lib:$LD_LIBRARY_PATH' >> ~/.bashrc
+```
+
+#### Verify TensorRT Installation
+
+```bash
+# Test TensorRT import and functionality
+python -c "
+import tensorrt as trt
+print(f'TensorRT version: {trt.__version__}')
+
+# Test basic functionality
+logger = trt.Logger(trt.Logger.WARNING)
+builder = trt.Builder(logger)
+print('✅ TensorRT installation successful!')
+"
+```
+
+#### Environment Setup Script
+
+Create a setup script for easy environment configuration:
+
+```bash
+# Create setup_tensorrt.sh
+cat > setup_tensorrt.sh << 'EOF'
+#!/bin/bash
+# TensorRT Environment Setup
+
+# Set paths (update these to match your installation)
+export CUDA_HOME=/usr/local/cuda
+export TENSORRT_HOME=/path/to/TensorRT-8.2.1.8
+
+# Update library paths
+export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$TENSORRT_HOME/lib:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=/usr/lib/python3/dist-packages/torch/lib:$LD_LIBRARY_PATH
+
+# Update Python path
+export PYTHONPATH=$TENSORRT_HOME/python:$PYTHONPATH
+
+echo "✅ TensorRT environment configured!"
+EOF
+
+# Make executable and run
+chmod +x setup_tensorrt.sh
+source setup_tensorrt.sh
+```
+
+#### Version Compatibility Matrix
+
+| Component | Version | Notes |
+|-----------|---------|-------|
+| Python | 3.7.16 | Exact version required |
+| PyTorch | 1.8.0 | With CUDA 11.1 support |
+| TensorRT | 8.2.1.8 | Compatible with CUDA 11.1 |
+| CUDA | 11.1+ | Runtime and toolkit |
+| cuDNN | 8.x | Required by TensorRT |
+
+#### Additional Troubleshooting
+
+**Issue 3: `CUDA driver version is insufficient for CUDA runtime version`**
+```bash
+# Check CUDA driver version
+nvidia-smi
+
+# Check CUDA runtime version
+nvcc --version
+
+# Update NVIDIA drivers if needed
+sudo apt update && sudo apt install nvidia-driver-470
+```
+
+**Issue 4: `ModuleNotFoundError: No module named 'tensorrt'`**
+```bash
+# Ensure correct Python environment is activated
+conda activate sereact
+
+# Reinstall TensorRT wheel
+pip uninstall tensorrt
+pip install tensorrt-8.2.1.8-cp37-none-linux_x86_64.whl
+```
+
+**Issue 5: Memory issues during conversion**
+```bash
+# Reduce batch size in conversion script
+# Monitor GPU memory usage
+nvidia-smi -l 1
+
+# Clear GPU cache if needed
+python -c "import torch; torch.cuda.empty_cache()"
+```
+
 ## 📁 Dataset Structure
 
 Organize your dataset as follows:

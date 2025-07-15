@@ -1,5 +1,5 @@
 #!/bin/bash
-# export WANDB_MODE="disabled"
+export WANDB_MODE="disabled"
 
 # cuDNN Error Fixes
 export CUDA_LAUNCH_BLOCKING=1
@@ -17,12 +17,11 @@ export CUDNN_DETERMINISTIC=1
 
 
 python -m torch.distributed.launch \
---nproc_per_node 3 \
+--nproc_per_node 1 \
 --master_port 12346  main.py \
 --cfg config/base_train.yaml \
 --output /home-local2/akath.extra.nobkp/sereact \
 --data-path /home-local2/akath.extra.nobkp/dl_challenge \
---tag "no_augmentation" \
---augment True \
+--export True \
 --batch-size 2
 # --pretrained /home-local2/akath.extra.nobkp/scannet_ep1080.pth

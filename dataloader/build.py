@@ -21,30 +21,6 @@ from .sereact_data_loader import SereactDataloader
 from .augmentations import SereactAugmentation
 
 
-
-# try:
-#     from torchvision.transforms import InterpolationMode
-
-
-#     def _pil_interp(method):
-#         if method == 'bicubic':
-#             return InterpolationMode.BICUBIC
-#         elif method == 'lanczos':
-#             return InterpolationMode.LANCZOS
-#         elif method == 'hamming':
-#             return InterpolationMode.HAMMING
-#         else:
-#             # default bilinear, do we want to allow nearest?
-#             return InterpolationMode.BILINEAR
-
-
-#     import timm.data.transforms as timm_transforms
-
-#     timm_transforms._pil_interp = _pil_interp
-# except:
-#     from timm.data.transforms import _pil_interp
-
-
 def build_loader(config: Any) -> Tuple[Dataset, Dataset, DataLoader, DataLoader]:
     """Build data loaders for training and validation.
 
@@ -124,8 +100,11 @@ def build_dataset(is_train: bool, config: Any) -> Dataset:
         NotImplementedError: If dataset type is not supported
     """
     if config.data.dataset == 'Sereact_dataset':
-        # transform = SereactAugmentation() if is_train else None
-        transform = None
+        if config.data.augment:
+            transform = SereactAugmentation() if is_train else None
+        else:
+            transform = None
+                    
         task = 'train' if is_train else 'test'
         dataset = SereactDataloader(
             source_path=config.data.data_path,
