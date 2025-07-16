@@ -144,7 +144,7 @@ To train the model, run the script below or use the pre-written launcher:
 
 - ▶️ **Training Script:** [`train.sh`](./train.sh)
 
-### 🔍 Evaluation Scripts
+### 🔍 Evaluation Scripts, exaplined in detail in [`VISUALIZATION_GUIDE`](VISUALIZATION_GUIDE.md)
 
 - ▶️ **With Visualization:** [`eval_visualisation.sh`](./eval_visualisation.sh)  
   Runs evaluation with **point cloud visualizations** and **box distribution plots**.
@@ -158,8 +158,8 @@ To train the model, run the script below or use the pre-written launcher:
 To export the trained model for deployment (e.g., ONNX or TensorRT), run the following script:
 
 - ▶️ **Deployment Script:** [`deploy.sh`](./deploy.sh)
-['model_onnx'](model.onnx)
-['model_tet'](model_trt.engine)
+
+The exported models are available for deployment: the ONNX version can be found at ['model_onnx'](model.onnx), and the TensorRT-optimized version is available at ['model_tet'](model_trt.engine).
 
 
 ## 🏗️ Architecture

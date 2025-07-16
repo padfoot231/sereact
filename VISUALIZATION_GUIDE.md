@@ -3,53 +3,63 @@
 ## 📊 **Available Visualization Features**
 
 ### **1. Box Distribution Analysis (Automatic)**
-- **What**: Statistical analysis of predicted vs ground truth bounding boxes
+- **What**: Comprehensive statistical analysis of predicted vs ground truth bounding boxes
 - **When**: Automatically generated during evaluation (`--eval` flag)
 - **Output**: `box_distributions.png` + wandb logging
-- **Features**: Volume, dimension, aspect ratio, and center position analysis
+- **Features**:
+  - Volume distribution comparison with mean indicators
+  - X, Y, Z dimension analysis with overlaid histograms
+  - Normalized dimension ratios for shape analysis
+  - Box center coordinate distributions
 
-### **2. Point Cloud Video Visualization (Enhanced)**
-- **What**: 3D rotating video visualization of point clouds with bounding boxes
+### **2. Point Cloud Static Visualization**
+- **What**: High-quality 3D point cloud images with bounding boxes
 - **When**: Only when `--visualize-point-cloud` flag is used during evaluation
-- **Output**: HD MP4 video files with 360° rotation
-- **Features**: RGB-colored point clouds, red (predicted) and green (GT) boxes
-
-### **3. Interactive Point Cloud Visualization (Legacy)**
-- **What**: Static PNG images of 3D point clouds with bounding boxes
-- **When**: Available as fallback option
 - **Output**: High-resolution PNG images (1920x1080)
+- **Features**:
+  - RGB-colored point clouds (up to 5000 points for performance)
+  - Red wireframe boxes (predicted) vs Green wireframe boxes (GT)
+  - Multiple viewing angles and perspectives
+  - Headless rendering (no display system required)
 
 ## 🚀 **How to Use Visualizations**
 
 ### **Option 1: Box Distribution Analysis Only**
 ```bash
-# Quick evaluation with box distribution plots
-./eval_box_distributions_only.sh
+# Quick evaluation with statistical box analysis
+python -m torch.distributed.launch \
+--nproc_per_node 1 \
+--master_port 12349 main.py \
+--eval \
+--cfg config/enhanced_loss_training.yaml \
+--output /path/to/output \
+--data-path /path/to/data \
+--resume /path/to/checkpoint.pth \
+--batch-size 1
 ```
 **Features:**
-- ✅ Box volume distribution comparison
-- ✅ Dimension analysis (X, Y, Z)
-- ✅ Aspect ratio analysis
+- ✅ Comprehensive box distribution plots
+- ✅ Volume analysis with mean indicators
+- ✅ Dimension analysis (X, Y, Z) with overlaid histograms
+- ✅ Normalized aspect ratio analysis
 - ✅ Center position distribution
-- ✅ Automatic plot generation
-- ✅ No interactive windows (runs unattended)
+- ✅ Automatic plot generation and wandb logging
+- ✅ Fast execution (no 3D rendering)
 
-### **Option 2: Full Visualization Suite with 3D Videos**
+### **Option 2: Full Visualization Suite**
 ```bash
-# Complete evaluation with 3D video visualizations
+# Complete evaluation with point cloud images
 ./eval_with_visualization.sh
 ```
 **Features:**
 - ✅ All box distribution analysis features
-- ✅ 3D point cloud video generation (MP4 format)
-- ✅ 360° rotating camera views (8-second duration)
-- ✅ HD quality output (1280x720, 24fps)
-- ✅ RGB-colored point clouds with height-based gradients
+- ✅ High-resolution point cloud images (1920x1080)
+- ✅ RGB-colored point clouds (subsampled to 5000 points)
 - ✅ Red wireframe boxes (predicted) vs Green wireframe boxes (GT)
-- ✅ Professional dark theme with legend
-- ✅ Up to 5 sample videos per evaluation
-- ✅ Headless compatible (no display system required)
-- ✅ Perfect for presentations and analysis
+- ✅ Multiple viewing perspectives
+- ✅ Up to 5 sample visualizations per evaluation
+- ✅ Headless rendering (works on servers without display)
+- ✅ Professional quality for presentations
 
 ### **Option 3: Manual Command**
 ```bash
@@ -58,7 +68,7 @@ python -m torch.distributed.launch \
 --nproc_per_node 1 \
 --master_port 12349 main.py \
 --eval \
---visualize-point-cloud \  # Add this flag for 3D video generation
+--visualize-point-cloud \  # Add this flag for point cloud images
 --cfg config/enhanced_loss_training.yaml \
 --output /path/to/output \
 --data-path /path/to/data \
@@ -66,60 +76,89 @@ python -m torch.distributed.launch \
 --batch-size 1
 ```
 
-### **Option 4: Test Video Generation**
-```bash
-# Test the video generation system
-python test_point_cloud_video.py
+### **Configuration Parameters**
+```yaml
+# In your config file
+eval_mode: true                    # Required for evaluation
+visualize_point_cloud: false       # Set to true for point cloud images
+print_freq: 10                     # Logging frequency
+save_freq: 5                       # Checkpoint saving frequency
 ```
-**Features:**
-- ✅ Generates sample 3D point cloud videos
-- ✅ Tests video generation functionality
-- ✅ Creates both quick preview and HD quality videos
-- ✅ Validates all dependencies and settings
 
 ## 📈 **Box Distribution Analysis Details**
 
-### **Generated Plots:**
-1. **Volume Distribution**
-   - Histogram comparing predicted vs GT box volumes
-   - Helps identify small volume under-prediction
+### **Enhanced Statistical Plots:**
 
-2. **Dimension Distribution**
-   - X, Y, Z dimension histograms
-   - Shows dimensional bias in predictions
+#### **1. Volume Distribution (Top Left)**
+- **Step histograms** comparing predicted vs GT box volumes
+- **Mean indicators** (dashed lines) showing average volumes
+- **Purpose**: Identify systematic volume under/over-prediction
+- **Look for**: Shifted distributions, different means
 
-3. **Aspect Ratio Analysis**
-   - Normalized dimension ratios
-   - Reveals shape diversity issues
+#### **2. Box Dimensions (Top Right)**
+- **Overlaid histograms** for X, Y, Z dimensions
+- **Color-coded** by dimension (X, Y, Z)
+- **Separate lines** for GT (dashed) vs Predicted (solid)
+- **Purpose**: Detect dimensional bias in predictions
+- **Look for**: Dimension-specific under/over-prediction
 
-4. **Center Position Distribution**
-   - Spatial distribution of box centers
-   - Indicates localization accuracy
+#### **3. Normalized Dimension Ratios (Bottom Left)**
+- **Aspect ratio analysis** (dimension / max dimension)
+- **Shape diversity assessment**
+- **Scale-invariant comparison**
+- **Purpose**: Evaluate shape prediction variety
+- **Look for**: Narrow predicted distributions vs diverse GT
+
+#### **4. Box Center Coordinates (Bottom Right)**
+- **Spatial distribution** of predicted vs GT centers
+- **X, Y, Z coordinate histograms**
+- **Localization accuracy assessment**
+- **Purpose**: Identify spatial prediction bias
+- **Look for**: Systematic shifts in center positions
 
 ### **Key Insights to Look For:**
-- **Small Volume Under-prediction**: Predicted volume histogram shifted left
-- **Shape Diversity Issues**: Narrow aspect ratio distributions
-- **Dimensional Bias**: Uneven X/Y/Z dimension distributions
-- **Localization Errors**: Misaligned center position distributions
+- **Volume Under-prediction**: Red histogram shifted left of blue
+- **Shape Uniformity**: Narrow predicted ratio distributions
+- **Dimensional Bias**: Uneven performance across X/Y/Z
+- **Spatial Bias**: Systematic center position shifts
+
+## 🖼️ **Point Cloud Visualization Details**
+
+### **Image Specifications:**
+- **Resolution**: 1920x1080 (Full HD)
+- **Format**: PNG with high quality
+- **Rendering**: Matplotlib 3D with non-interactive backend
+- **Performance**: Subsampled to 5000 points for optimal rendering
+
+### **Visual Elements:**
+- **Point Clouds**: RGB-colored based on original data
+- **Predicted Boxes**: Red wireframe bounding boxes
+- **Ground Truth Boxes**: Green wireframe bounding boxes
+- **Viewing Angles**: Optimized 3D perspective
+- **Background**: Clean white background for clarity
+
+### **Technical Features:**
+- **Headless Rendering**: Works without display system (uses 'Agg' backend)
+- **Memory Efficient**: Automatic point cloud subsampling
+- **Error Handling**: Graceful fallback for rendering issues
+- **Batch Processing**: Up to 5 samples per evaluation run
 
 ## ⚙️ **Configuration Options**
-
-### **In Config File:**
-```yaml
-# Enable/disable visualizations
-eval_mode: true                    # Required for any visualization
-visualize_point_cloud: false       # Set to true for point cloud viz
-
-# Visualization settings (optional)
-print_freq: 5                      # Logging frequency
-save_freq: 5                       # Checkpoint saving frequency
-```
 
 ### **Command Line Flags:**
 ```bash
 --eval                             # Enable evaluation mode (required)
---visualize-point-cloud           # Enable point cloud visualization
+--visualize-point-cloud           # Enable point cloud image generation
 --batch-size 1                    # Recommended for visualization
+--output /path/to/output          # Directory for output files
+```
+
+### **In Config File:**
+```yaml
+# Visualization settings
+eval_mode: true                    # Required for evaluation
+print_freq: 10                     # Progress logging frequency
+save_freq: 5                       # Checkpoint saving frequency
 ```
 
 ## 🔧 **Troubleshooting**
@@ -128,24 +167,25 @@ save_freq: 5                       # Checkpoint saving frequency
 
 1. **"No display" Error**
    ```bash
-   # Fixed! Video generation works on headless servers
-   # MP4 videos are saved directly without requiring a display
-   # No X11 forwarding needed
+   # Fixed! Point cloud visualization works on headless servers
+   # PNG images are saved directly without requiring a display
+   # Uses matplotlib 'Agg' backend - no X11 forwarding needed
    ```
 
-2. **Video Generation Fails**
+2. **Matplotlib Import Errors**
    ```bash
-   # Check dependencies
-   pip install matplotlib opencv-python
-   # Test video generation
-   python test_point_cloud_video.py
+   # Check matplotlib installation
+   pip install matplotlib
+   # Verify backend configuration
+   python -c "import matplotlib; print(matplotlib.get_backend())"
    ```
 
 3. **Memory Issues**
    ```bash
    # Reduce batch size for visualization
    --batch-size 1
-   # Point clouds are automatically subsampled to 10k points
+   # Point clouds are automatically subsampled to 5000 points
+   # Monitor memory usage during rendering
    ```
 
 4. **No Boxes to Visualize**
@@ -153,134 +193,162 @@ save_freq: 5                       # Checkpoint saving frequency
    # Check if model is making predictions
    # Verify checkpoint path is correct
    # Check data path and format
+   # Ensure model outputs valid bounding boxes
    ```
 
-5. **Videos Not Being Generated**
+5. **Images Not Being Generated**
    ```bash
-   # Check if matplotlib backend is set correctly
+   # Check matplotlib backend
+   python -c "import matplotlib; matplotlib.use('Agg'); print('Backend OK')"
    # Verify write permissions in current directory
-   ls -la *.mp4
-   # Check available disk space for video files
+   ls -la *.png
+   # Check available disk space for image files
+   ```
+
+6. **Poor Image Quality**
+   ```bash
+   # Images are generated at 1920x1080 resolution
+   # Point clouds are subsampled to 5000 points for performance
+   # Increase max_points in code if needed for denser visualization
    ```
 
 ## 📊 **Output Files**
 
 ### **Automatic Outputs:**
-- `box_distributions.png` - Statistical box analysis plots
-- `point_cloud_sample_*.mp4` - 3D point cloud video visualizations
-- Console logs with visualization progress
-- Wandb logs (if enabled)
+- `box_distributions.png` - Enhanced statistical box analysis plots
+- `point_cloud_sample_*.png` - High-resolution point cloud images
+- Console logs with detailed visualization progress
+- Wandb logs with embedded visualizations (if enabled)
 
-### **Point Cloud Video Outputs:**
-- HD MP4 video files (1280x720, 24fps)
-- 8-second duration with 360° rotation
-- RGB-colored point clouds with height-based gradients
-- Red wireframe boxes (predicted) vs Green wireframe boxes (GT)
-- Professional dark theme with legend and labels
-- File sizes typically 2-5 MB per video
+### **Point Cloud Image Outputs:**
+- **Format**: PNG files at 1920x1080 resolution
+- **Naming**: `point_cloud_sample_{N}_batch_{B}.png`
+- **Content**: RGB-colored point clouds with bounding boxes
+- **Colors**: Red wireframe (predicted) vs Green wireframe (GT)
+- **Quality**: High-resolution for presentations and analysis
+- **File sizes**: Typically 1-3 MB per image
 
-## 🎬 **Point Cloud Video Features**
+### **Box Distribution Plot Features:**
+- **Enhanced styling**: Seaborn whitegrid theme with Set1 color palette
+- **Step histograms**: Clear comparison between predicted and GT
+- **Mean indicators**: Dashed lines showing distribution centers
+- **Multi-panel layout**: 2x2 grid with comprehensive analysis
+- **Professional quality**: Publication-ready plots
 
-### **Video Specifications:**
-- **Format**: MP4 with H.264 encoding
-- **Resolution**: 1280x720 (HD) - customizable
-- **Frame Rate**: 24 fps for smooth motion
-- **Duration**: 8 seconds (full 360° rotation)
-- **Camera Motion**: Smooth orbital rotation around scene center
+## 🎨 **Visualization Quality and Performance**
 
-### **Visual Elements:**
-- **Point Clouds**: RGB-colored with height-based gradients
-  - Red increases with height
-  - Blue decreases with height
-  - Green constant for balance
-- **Predicted Boxes**: Red wireframe bounding boxes
-- **Ground Truth Boxes**: Green wireframe bounding boxes
-- **Background**: Professional dark theme
-- **Legend**: Clear identification of all elements
+### **Point Cloud Rendering:**
+- **Subsampling Strategy**: Automatically reduces to 5000 points for optimal performance
+- **Color Preservation**: Maintains RGB information from original data
+- **3D Perspective**: Optimized viewing angle for best spatial understanding
+- **Wireframe Boxes**: Clean, professional bounding box representation
 
-### **Technical Features:**
-- **Automatic Subsampling**: Limits to 10k points for performance
-- **Smart Camera Positioning**: Optimal viewing distance and angle
-- **Headless Rendering**: Works without display system
-- **Memory Efficient**: Handles large point clouds safely
-- **Quality Options**: Configurable resolution and frame rate
+### **Performance Characteristics:**
+- **Rendering Time**: ~10-30 seconds per image depending on complexity
+- **Memory Usage**: ~1-2GB during rendering phase
+- **Disk Space**: 1-3 MB per PNG image
+- **CPU Usage**: High during matplotlib 3D rendering
 
-### **Benefits Over Static Images:**
-- **Complete Spatial Understanding**: 360° view reveals all relationships
-- **Depth Perception**: True 3D structure clearly visible
-- **Error Detection**: Misaligned boxes easily spotted
-- **Professional Presentation**: Impressive videos for reports/demos
-- **Analysis Efficiency**: Single video shows all angles
+### **Quality Optimization:**
+- **Resolution**: Full HD (1920x1080) for presentation quality
+- **Anti-aliasing**: Smooth edges and clean wireframes
+- **Color Balance**: Optimized RGB representation
+- **Contrast**: Clear distinction between predicted and GT boxes
+
+### **Benefits of Static Images:**
+- **High Resolution**: Detailed analysis at full HD quality
+- **Fast Generation**: Quicker than video rendering
+- **Easy Sharing**: Standard PNG format for presentations
+- **Multiple Angles**: Can generate different perspectives
+- **Annotation Friendly**: Easy to add labels and annotations
 
 ## 💡 **Best Practices**
 
 ### **For Analysis:**
 1. **Start with box distributions** to identify systematic issues
-2. **Use point cloud videos** to understand 3D spatial relationships
+2. **Use point cloud images** to understand 3D spatial relationships
 3. **Compare before/after** training improvements visually
-4. **Focus on failure cases** revealed by video analysis
-5. **Share videos** for team discussions and presentations
+4. **Focus on failure cases** revealed by visualization
+5. **Generate multiple samples** to understand model consistency
 
 ### **For Performance:**
-1. **Use batch_size=1** for video generation
-2. **Limit to 5 samples** per evaluation run
-3. **Generate quick previews** first (low resolution, short duration)
-4. **Create HD videos** for important samples and final results
-5. **Monitor disk space** as videos can accumulate quickly
+1. **Use batch_size=1** for point cloud visualization
+2. **Limit to 5 samples** per evaluation run to manage resources
+3. **Monitor memory usage** during rendering phase
+4. **Clean up old images** to manage disk space
+5. **Run on machines with sufficient RAM** (4GB+ recommended)
 
-### **For Video Quality:**
-1. **Quick Preview**: 640x480, 15fps, 3s (fast generation)
-2. **Standard Quality**: 1280x720, 24fps, 8s (default)
-3. **High Quality**: 1920x1080, 30fps, 10s (presentations)
-4. **Debug Mode**: 480x360, 12fps, 2s (rapid iteration)
+### **For Quality:**
+1. **Full HD Images**: 1920x1080 resolution for presentations
+2. **Subsampled Points**: 5000 points for optimal performance/quality balance
+3. **Professional Output**: High-quality PNG format
+4. **Clear Distinction**: Red (predicted) vs Green (GT) color coding
+
+### **Workflow Recommendations:**
+1. **Quick Analysis**: Run without `--visualize-point-cloud` first
+2. **Detailed Review**: Add point cloud visualization for specific cases
+3. **Presentation Prep**: Generate high-quality images for reports
+4. **Debugging**: Focus on samples with poor IoU scores
 
 ## 🎯 **Integration with Training**
 
 ### **During Training:**
 - Box distributions automatically generated during validation
-- No video generation (would slow training significantly)
+- No point cloud visualization (would slow training)
 - Metrics logged to wandb for monitoring
 - Quick statistical analysis only
 
 ### **During Evaluation:**
 - Full visualization capabilities available
-- 3D video generation for detailed analysis
+- High-resolution point cloud image generation
 - Comprehensive model performance assessment
 - Professional presentation materials
 
 ## 🚀 **Advanced Usage**
 
-### **Custom Video Settings:**
+### **Custom Evaluation Scripts:**
 ```python
-# In your evaluation script
-save_point_cloud_video(
-    point_cloud=your_data,
-    rgb_tensor=rgb_image,
-    predicted_boxes=pred_boxes,
-    gt_boxes=gt_boxes,
-    save_path="custom_analysis.mp4",
-    duration=10.0,           # 10 second video
-    fps=30,                  # High frame rate
-    resolution=(1920, 1080)  # Full HD
+# Custom evaluation with visualization
+import torch
+from main import evaluate_model
+
+# Load model and data
+model = load_model(checkpoint_path)
+data_loader = create_data_loader(data_path)
+
+# Run evaluation with visualization
+results = evaluate_model(
+    model=model,
+    data_loader=data_loader,
+    visualize_point_cloud=True,
+    output_dir="custom_analysis"
 )
 ```
 
-### **Batch Video Generation:**
+### **Batch Analysis for Multiple Checkpoints:**
 ```bash
-# Generate videos for multiple checkpoints
+# Generate visualizations for multiple checkpoints
 for checkpoint in ckpt_*.pth; do
+    echo "Analyzing $checkpoint..."
     python -m torch.distributed.launch \
     --nproc_per_node 1 main.py \
     --eval --visualize-point-cloud \
     --resume $checkpoint \
-    --output "analysis_$(basename $checkpoint .pth)"
+    --output "analysis_$(basename $checkpoint .pth)" \
+    --batch-size 1
 done
 ```
 
 ### **Performance Monitoring:**
-- **Video Generation Time**: ~30-60 seconds per video
-- **Memory Usage**: ~2-4GB during generation
-- **Disk Space**: ~3-5MB per video file
-- **CPU Usage**: High during rendering phase
+- **Image Generation Time**: ~10-30 seconds per image
+- **Memory Usage**: ~1-2GB during rendering
+- **Disk Space**: ~1-3MB per PNG file
+- **CPU Usage**: High during matplotlib 3D rendering
 
-The enhanced visualization system provides comprehensive 3D analysis tools to understand and improve your model's performance! 🎯
+### **Integration with Analysis Pipeline:**
+- **Automated Reports**: Combine box distributions with point cloud images
+- **Progress Tracking**: Compare visualizations across training epochs
+- **Failure Analysis**: Focus on samples with low IoU scores
+- **Presentation Materials**: High-quality images for reports and papers
+
+The visualization system provides comprehensive tools to understand and improve your 3D object detection model's performance! 🎯
