@@ -146,6 +146,8 @@ To train the model, run the script below or use the pre-written launcher:
 To export the trained model for deployment (e.g., ONNX or TensorRT), run the following script:
 
 - ▶️ **Deployment Script:** [`deploy.sh`](./deploy.sh)
+['model_onnx'](model.onnx)
+['model_tet'](model_trt.engine)
 
 ### 📂 Shared Paths Used
 

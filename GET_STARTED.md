@@ -63,22 +63,26 @@ TensorRT converts trained models to optimized inference engines. **Manual downlo
 
 1. **Download from NVIDIA** (free account required):
    - Visit: https://developer.nvidia.com/tensorrt
-   - Download: `TensorRT-8.2.1.8.Linux.x86_64-gnu.cuda-11.1.cudnn8.2.tar.gz`
+   - Download: `TensorRT-8.2.1.8.Linux.x86_64-gnu.cuda-11.4.cudnn8.2.tar.gz`
 
 2. **Extract and Install**:
 ```bash
-mkdir -p ~/tensorrt && cd ~/tensorrt
-tar -xzf TensorRT-8.2.1.8.Linux.x86_64-gnu.cuda-11.1.cudnn8.2.tar.gz
-cd TensorRT-8.2.1.8/python
-pip install tensorrt-8.2.1.8-cp37-none-linux_x86_64.whl
+tar -xvf TensorRT-8.2.1.8.Linux.x86_64-gnu.cuda-11.4.cudnn8.2.tar.gz 
+cd TensorRT-8.2.1.8
+pip install python/tensorrt-8.2.1.8-cp37-none-linux_x86_64.whl
 ```
 
 3. **Fix Library Paths** (fixes common import errors):
 ```bash
-# Add to ~/.bashrc
-echo 'export LD_LIBRARY_PATH=~/tensorrt/TensorRT-8.2.1.8/lib:$LD_LIBRARY_PATH' >> ~/.bashrc
-echo 'export LD_LIBRARY_PATH=$(python -c "import torch; print(torch.__path__[0])")/lib:$LD_LIBRARY_PATH' >> ~/.bashrc
-source ~/.bashrc
+# libnvinfer.so.8 not found 
+find . -name "libnvinfer.so.8"
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home-local/akath.nobkp/sereact/TensorRT-8.2.1.8/lib
+
+#libcudnn.so.8 not found
+find /usr -name "libcudnn.so.8" 2>/dev/null
+# /usr/lib/python3/dist-packages/torch/lib enter path to your library found from above command
+export LD_LIBRARY_PATH=/usr/lib/python3/dist-packages/tensorflow:/usr/lib/python3/dist-packages/torch/lib:$LD_LIBRARY_PATH
+#
 ```
 
 4. **Test Installation**:
