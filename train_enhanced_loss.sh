@@ -30,7 +30,7 @@ python -m torch.distributed.launch \
 --cfg config/enhanced_loss_training.yaml \
 --output /home-local2/akath.extra.nobkp/sereact_enhanced \
 --data-path /home-local2/akath.extra.nobkp/dl_challenge \
---tag "enhanced_loss" \
+--tag "enhanced_loss_data_aug" \
 --batch-size 2
 
 echo ""

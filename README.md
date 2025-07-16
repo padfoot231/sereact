@@ -11,6 +11,13 @@ A PyTorch implementation of 3D object detection using 3DETR (3D Detection Transf
 - **CUDA Extensions**: Optimized PointNet++ operations
 - **Comprehensive Loss Functions**: GIoU, angle, size, and corner losses
 
+### 📈 Experimental Results
+
+| Setting              | IoU@0.25   | Mean IoU |
+|----------------------|------------|----------|
+| Without Augmentation | ~0.35–0.40 | **0.47** |
+| With Augmentation    | ~0.35–0.40 | **0.49** |
+
 ## 📋 Requirements
 
 ### System Requirements
@@ -171,6 +178,42 @@ chmod +x setup_tensorrt.sh
 source setup_tensorrt.sh
 ```
 
+
+## 🔧 Troubleshooting
+
+### CUDA Extensions Issues
+```bash
+# If compilation fails, check CUDA installation
+nvcc --version
+export PATH=/usr/local/cuda/bin:$PATH
+export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+
+# Clean and rebuild
+cd models/detr3d/_ext_src
+rm -rf build/
+python3 setup.py build_ext --inplace
+```
+
+### Memory Issues
+```bash
+# Reduce batch size
+data:
+  batch_size: 1
+
+# Enable memory optimizations
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+```
+
+### Import Errors
+```bash
+# Ensure CUDA extensions are compiled
+cd models/detr3d/_ext_src
+python3 setup.py build_ext --inplace
+
+# Test import
+python -c "import _ext_src"
+```
+
 #### Version Compatibility Matrix
 
 | Component | Version | Notes |
@@ -180,40 +223,6 @@ source setup_tensorrt.sh
 | TensorRT | 8.2.1.8 | Compatible with CUDA 11.1 |
 | CUDA | 11.1+ | Runtime and toolkit |
 | cuDNN | 8.x | Required by TensorRT |
-
-#### Additional Troubleshooting
-
-**Issue 3: `CUDA driver version is insufficient for CUDA runtime version`**
-```bash
-# Check CUDA driver version
-nvidia-smi
-
-# Check CUDA runtime version
-nvcc --version
-
-# Update NVIDIA drivers if needed
-sudo apt update && sudo apt install nvidia-driver-470
-```
-
-**Issue 4: `ModuleNotFoundError: No module named 'tensorrt'`**
-```bash
-# Ensure correct Python environment is activated
-conda activate sereact
-
-# Reinstall TensorRT wheel
-pip uninstall tensorrt
-pip install tensorrt-8.2.1.8-cp37-none-linux_x86_64.whl
-```
-
-**Issue 5: Memory issues during conversion**
-```bash
-# Reduce batch size in conversion script
-# Monitor GPU memory usage
-nvidia-smi -l 1
-
-# Clear GPU cache if needed
-python -c "import torch; torch.cuda.empty_cache()"
-```
 
 ## 📁 Dataset Structure
 
@@ -320,51 +329,10 @@ python main.py \
 - **Size Loss**: L1 loss for size prediction
 - **Angle Loss**: Classification + regression for orientation
 
-## 🔧 Troubleshooting
-
-### CUDA Extensions Issues
-```bash
-# If compilation fails, check CUDA installation
-nvcc --version
-export PATH=/usr/local/cuda/bin:$PATH
-export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
-
-# Clean and rebuild
-cd models/detr3d/_ext_src
-rm -rf build/
-python3 setup.py build_ext --inplace
-```
-
-### Memory Issues
-```bash
-# Reduce batch size
-data:
-  batch_size: 1
-
-# Enable memory optimizations
-export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
-```
-
-### Import Errors
-```bash
-# Ensure CUDA extensions are compiled
-cd models/detr3d/_ext_src
-python3 setup.py build_ext --inplace
-
-# Test import
-python -c "import _ext_src"
-```
-
-## 📊 Performance
-
-### Expected Results
-- **IoU@0.25**: ~0.35-0.40
-- **IoU@0.50**: ~0.06-0.08
-- **Mean IoU**: ~0.20-0.25
 
 ### Training Time
-- **Single GPU**: ~2-3 hours per epoch
-- **Multi-GPU**: ~1-1.5 hours per epoch
+- **Single GPU**: ~2 minute 24 seconds per epoch
+- **Multi-GPU**: ~49 seconds per epoch
 
 ## 🔗 Dependencies
 
@@ -383,7 +351,3 @@ See `requirements.txt` for complete list of dependencies optimized for Python 3.
 2. Compile CUDA extensions after any changes
 3. Test with both single and multi-GPU setups
 4. Verify all imports work correctly
-
-## 📄 License
-
-[Add your license information here]

@@ -270,13 +270,16 @@ def train_one_epoch(
             lr = optimizer.param_groups[0]['lr']
             memory_used = torch.cuda.max_memory_allocated() / (1024.0 * 1024.0)
             etas = batch_time.avg * (num_steps - batch_idx)
-            metric = iou_evaluator.compute_metrics()['mean_iou']
+            train_metrics = iou_evaluator.compute_metrics()
+            metric = train_metrics['mean_iou']
+            iou_25_accuracy = train_metrics['threshold_accuracy'].get(0.25, 0.0)
             logger.info(
                 f'Train: [{epoch}/{config.train.max_epoch}][{batch_idx}/{num_steps}]\t'
                 f'eta {datetime.timedelta(seconds=int(etas))} lr {lr:.6f}\t'
                 f'time {batch_time.val:.4f} ({batch_time.avg:.4f})\t'
                 f'loss {loss_meter.val:.4f} ({loss_meter.avg:.4f})\t'
                 f'miou {metric:.4f}\t'
+                f'IoU@0.25 {iou_25_accuracy:.4f} ({iou_25_accuracy*100:.1f}%)\t'
                 f'grad_norm {norm_meter.val:.4f} ({norm_meter.avg:.4f})\t'
                 f'loss_scale {scaler_meter.val:.4f} ({scaler_meter.avg:.4f})\t'
                 f'mem {memory_used:.0f}MB')
@@ -285,6 +288,8 @@ def train_one_epoch(
                     'Iteration': batch_idx,
                     'train_loss': loss_meter.avg,
                     'train_miou': metric,
+                    'train_iou_at_0.25': iou_25_accuracy,
+                    'train_iou_at_0.25_percent': iou_25_accuracy * 100,
                 }
             )
     _ = iou_evaluator.compute_metrics()
@@ -375,14 +380,30 @@ def validate(
         batch_time.update(time.time() - end)
         end = time.time()
 
-    metrics = iou_evaluator.compute_metrics()['mean_iou']
-    wandb.log(
-        {
-            'epoch': epoch,
-            'val_loss': loss_meter.avg,
-            'val_miou': metrics,
-        }
-    )
+    # Get comprehensive metrics including threshold accuracies
+    full_metrics = iou_evaluator.compute_metrics()
+    mean_iou = full_metrics['mean_iou']
+    threshold_accuracies = full_metrics['threshold_accuracy']
+
+    # Log detailed metrics
+    logger.info(f"Validation Results:")
+    logger.info(f"  Mean IoU: {mean_iou:.4f}")
+    for threshold, accuracy in threshold_accuracies.items():
+        logger.info(f"  IoU@{threshold}: {accuracy:.4f} ({accuracy*100:.2f}% correct predictions)")
+
+    # Log to wandb with detailed metrics
+    wandb_metrics = {
+        'epoch': epoch,
+        'val_loss': loss_meter.avg,
+        'val_miou': mean_iou,
+    }
+
+    # Add threshold-specific metrics to wandb
+    for threshold, accuracy in threshold_accuracies.items():
+        wandb_metrics[f'val_iou_at_{threshold}'] = accuracy
+        wandb_metrics[f'val_iou_at_{threshold}_percent'] = accuracy * 100
+
+    wandb.log(wandb_metrics)
 
     # Generate box distribution visualization during evaluation only
     if config and config.eval_mode and all_predicted_boxes and all_gt_boxes:
@@ -446,7 +467,7 @@ def validate(
         except Exception as e:
             logger.warning(f'Failed to generate point cloud visualizations: {e}')
 
-    return metrics, loss_meter.avg
+    return mean_iou, loss_meter.avg
 
 
 def get_predicted_and_gt_boxes_from_assignments(
