@@ -126,10 +126,6 @@ train:
   base_lr: 0.0001
 ```
 
-## 🚀 Training
-
-To train the model using 3 GPUs, run the following command or make changes in train.sh file:
-
 ## 🏋️‍♂️ Training
 
 To train the model, run the script below or use the pre-written launcher:

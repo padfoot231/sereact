@@ -9,9 +9,9 @@ This report analyzes the performance of the 3DETR-based 3D object detection mode
 ## 📈 **Performance Overview**
 
 ### **Current Metrics**
-| Metric | Value | Target | 
-|--------|-------|--------|
-| Mean IoU | 0.47-0.49 | >0.60 | 
+| Metric | Value |
+|--------|-------|
+| Mean IoU | 0.47-0.49 |
 | Training Time/Epoch | 49s |
 | Model Size | 4.49M params |
 
@@ -82,32 +82,6 @@ This report analyzes the performance of the 3DETR-based 3D object detection mode
 - **Before**: Relied on numerical metrics alone
 - **After**: Clear visual understanding of failure modes
 - **Benefit**: Targeted improvement strategies possible
-
----
-
-## 🔧 **Technical Issues Identified**
-
-### **1. Loss Function Imbalance**
-- **Current Weights**: May not adequately address small object detection
-- **Volume-Aware Loss**: Needs higher weight (current: 0.3, recommended: 0.6+)
-- **Aspect Ratio Loss**: Requires increased emphasis (current: 0.4, recommended: 0.8+)
-
-### **2. Data Augmentation Gaps**
-- **Small Box Boost**: Current probability (0.2) may be insufficient
-- **Aspect Ratio Augmentation**: Limited diversity in training shapes
-- **Volume Scaling**: Conservative scaling factors
-
-### **3. Architecture Limitations**
-- **Feature Resolution**: May be insufficient for small object details
-- **Attention Mechanism**: Could benefit from multi-scale attention
-- **Fusion Strategy**: RGB-point cloud integration needs refinement
-
-### **4. Training Strategy**
-- **Learning Rate**: May be too aggressive for fine-grained features
-- **Batch Size**: Small batch size (2) limits gradient stability
-- **Epoch Count**: Current training may be insufficient for convergence
-
----
 
 ## 🎯 **Strengths and Weaknesses**
 
