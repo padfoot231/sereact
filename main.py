@@ -131,7 +131,7 @@ def main(config: Any) -> None:
     model = torch.nn.parallel.DistributedDataParallel(
         model,
         device_ids=[config.local_rank],
-        find_unused_parameters=True,    # Fix for "Reducer buckets rebuilt" warning
+        find_unused_parameters=False,    # Fix for "Reducer buckets rebuilt" warning
         broadcast_buffers=False
     )
     loss_scaler = NativeScalerWithGradNormCount()

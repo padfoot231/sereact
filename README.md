@@ -98,92 +98,44 @@ print(f'CUDA available: {torch.cuda.is_available()}')
 "
 ```
 
-### 5. TensorRT Installation (For Model Conversion)
+### 5. TensorRT Installation (Optional - For Model Optimization)
 
-TensorRT is required for converting trained models to optimized inference engines. Follow these steps for Python 3.7 and PyTorch 1.8.0 compatibility:
+TensorRT converts trained models to optimized inference engines. **Manual download required from NVIDIA.**
 
-#### Download and Install TensorRT
+#### Quick Installation Steps
 
+1. **Download from NVIDIA** (free account required):
+   - Visit: https://developer.nvidia.com/tensorrt
+   - Download: `TensorRT-8.2.1.8.Linux.x86_64-gnu.cuda-11.1.cudnn8.2.tar.gz`
+
+2. **Extract and Install**:
 ```bash
-# Download TensorRT 8.2.1.8 from NVIDIA Developer website
-# Navigate to TensorRT Python directory
+mkdir -p ~/tensorrt && cd ~/tensorrt
+tar -xzf TensorRT-8.2.1.8.Linux.x86_64-gnu.cuda-11.1.cudnn8.2.tar.gz
 cd TensorRT-8.2.1.8/python
-
-# Install the wheel for Python 3.7
 pip install tensorrt-8.2.1.8-cp37-none-linux_x86_64.whl
 ```
 
-#### Common Installation Issues & Fixes
-
-**Issue 1: `ImportError: libcudnn.so.8: cannot open shared object file`**
-
-This occurs when TensorRT can't find cuDNN libraries. Fix by adding PyTorch's CUDA libraries:
-
+3. **Fix Library Paths** (fixes common import errors):
 ```bash
-# Temporary fix (current session)
-export LD_LIBRARY_PATH=/usr/lib/python3/dist-packages/torch/lib:$LD_LIBRARY_PATH
-
-# Permanent fix (add to ~/.bashrc)
-echo 'export LD_LIBRARY_PATH=/usr/lib/python3/dist-packages/torch/lib:$LD_LIBRARY_PATH' >> ~/.bashrc
+# Add to ~/.bashrc
+echo 'export LD_LIBRARY_PATH=~/tensorrt/TensorRT-8.2.1.8/lib:$LD_LIBRARY_PATH' >> ~/.bashrc
+echo 'export LD_LIBRARY_PATH=$(python -c "import torch; print(torch.__path__[0])")/lib:$LD_LIBRARY_PATH' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-**Issue 2: `ImportError: libnvinfer.so.8: cannot open shared object file`**
-
-Add TensorRT libraries to your library path:
-
+4. **Test Installation**:
 ```bash
-# Replace /path/to/ with your actual TensorRT installation path
-export LD_LIBRARY_PATH=/path/to/TensorRT-8.2.1.8/lib:$LD_LIBRARY_PATH
-
-# Make permanent
-echo 'export LD_LIBRARY_PATH=/path/to/TensorRT-8.2.1.8/lib:$LD_LIBRARY_PATH' >> ~/.bashrc
+python -c "import tensorrt as trt; print(f'TensorRT {trt.__version__} ready!')"
 ```
 
-#### Verify TensorRT Installation
+#### Common Errors & Quick Fixes
 
-```bash
-# Test TensorRT import and functionality
-python -c "
-import tensorrt as trt
-print(f'TensorRT version: {trt.__version__}')
+**Error**: `ImportError: libcudnn.so.8: cannot open shared object file`
+**Fix**: `export LD_LIBRARY_PATH=$(python -c "import torch; print(torch.__path__[0])")/lib:$LD_LIBRARY_PATH`
 
-# Test basic functionality
-logger = trt.Logger(trt.Logger.WARNING)
-builder = trt.Builder(logger)
-print('✅ TensorRT installation successful!')
-"
-```
-
-#### Environment Setup Script
-
-Create a setup script for easy environment configuration:
-
-```bash
-# Create setup_tensorrt.sh
-cat > setup_tensorrt.sh << 'EOF'
-#!/bin/bash
-# TensorRT Environment Setup
-
-# Set paths (update these to match your installation)
-export CUDA_HOME=/usr/local/cuda
-export TENSORRT_HOME=/path/to/TensorRT-8.2.1.8
-
-# Update library paths
-export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
-export LD_LIBRARY_PATH=$TENSORRT_HOME/lib:$LD_LIBRARY_PATH
-export LD_LIBRARY_PATH=/usr/lib/python3/dist-packages/torch/lib:$LD_LIBRARY_PATH
-
-# Update Python path
-export PYTHONPATH=$TENSORRT_HOME/python:$PYTHONPATH
-
-echo "✅ TensorRT environment configured!"
-EOF
-
-# Make executable and run
-chmod +x setup_tensorrt.sh
-source setup_tensorrt.sh
-```
+**Error**: `ImportError: libnvinfer.so.8: cannot open shared object file`
+**Fix**: `export LD_LIBRARY_PATH=~/tensorrt/TensorRT-8.2.1.8/lib:$LD_LIBRARY_PATH`
 
 
 #### Version Compatibility Matrix

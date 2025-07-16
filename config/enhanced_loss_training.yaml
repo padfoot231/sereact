@@ -55,18 +55,15 @@ model:
 
 # Enhanced loss configuration with new loss functions
 loss:
-  # Matcher costs
   matcher_costs:
     giou: 5.0
     cost_box_corners: 1.0
     l1: 2.0
-  
-  # Enhanced loss weights
   weights:
-    giou: 1.5                    # Slightly increased
-    box_corners: 1.2             # Slightly increased
-    size: 1.0                    # Keep original
-    size_reg: 1.0                # Keep original
+    giou: 1.0
+    box_corners: 1.0 # Was 2.0 made 1.0
+    size: 1.0
+    size_reg: 1.0  # Re-enabled after fixing scale mismatch
     angle_cls: 0.1
     angle_reg: 0.1
     aspect_ratio: 0.4            # NEW: Moderate weight for aspect ratio
