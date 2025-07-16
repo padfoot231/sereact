@@ -21,39 +21,6 @@ python -c "import torch; print(f'PyTorch {torch.__version__} - CUDA: {torch.cuda
 pip install -r requirements.txt
 ```
 
-### 3. Build CUDA Extensions
-
-The project includes custom CUDA extensions for PointNet++ operations that need to be compiled:
-
-```bash
-# Navigate to CUDA extensions directory
-cd models/detr3d/_ext_src
-
-# Build CUDA extensions
-python3 setup.py build_ext --inplace
-
-# Verify compilation
-python -c "import _ext_src; print('CUDA extensions compiled successfully!')"
-
-# Return to project root
-cd ../../..
-```
-
-### 4. Verify Installation
-
-```bash
-# Test all imports
-python -c "
-import torch
-import torchvision
-import numpy as np
-from models.detr3d.model_3ddetr import build_3ddetr_model
-from models.detr3d._ext_src import _ext_src
-print('✅ All components imported successfully!')
-print(f'PyTorch: {torch.__version__}')
-print(f'CUDA available: {torch.cuda.is_available()}')
-"
-```
 
 ### 5. TensorRT Installation (Optional - For Model Optimization)
 
@@ -88,6 +55,40 @@ export LD_LIBRARY_PATH=/usr/lib/python3/dist-packages/tensorflow:/usr/lib/python
 4. **Test Installation**:
 ```bash
 python -c "import tensorrt as trt; print(f'TensorRT {trt.__version__} ready!')"
+```
+
+### 3. Build CUDA Extensions
+
+The project includes custom CUDA extensions for PointNet++ operations that need to be compiled:
+
+```bash
+# Navigate to CUDA extensions directory
+cd models/detr3d/_ext_src
+
+# Build CUDA extensions
+python3 setup.py build_ext --inplace
+
+# Verify compilation
+python -c "import _ext_src; print('CUDA extensions compiled successfully!')"
+
+# Return to project root
+cd ../../..
+```
+
+### 4. Verify Installation
+
+```bash
+# Test all imports
+python -c "
+import torch
+import torchvision
+import numpy as np
+from models.detr3d.model_3ddetr import build_3ddetr_model
+from models.detr3d._ext_src import _ext_src
+print('✅ All components imported successfully!')
+print(f'PyTorch: {torch.__version__}')
+print(f'CUDA available: {torch.cuda.is_available()}')
+"
 ```
 
 #### Common Errors & Quick Fixes

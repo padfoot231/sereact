@@ -126,6 +126,18 @@ train:
   base_lr: 0.0001
 ```
 
+### 📂 Shared config for training/evaluation/deployment
+
+| Argument           | Description                                          | Example Path                                                     |
+| ------------------ | ---------------------------------------------------- | ---------------------------------------------------------------- |
+| `--cfg`            | Path to YAML config file                             | `config/enhanced_loss_training.yaml` or `config/base_train.yaml` |
+| `--data-path`      | Path to the input dataset                            | `/home-local2/akath.extra.nobkp/dl_challenge`                    |
+| `--output`         | Directory to store logs, checkpoints, visualizations | `/home-local2/akath.extra.nobkp/sereact_enhanced` or `sereact`   |
+| `--resume`         | Checkpoint path for evaluation or deployment         | `/.../ckpt_best.pth`                                             |
+| `--tag`            | Experiment name                                      | `enhanced_loss_data_aug`                                         |
+| `--nproc_per_node` | Number of GPUs used                                  | `1`, `2`, `3`, etc.                                              |
+
+
 ## 🏋️‍♂️ Training
 
 To train the model, run the script below or use the pre-written launcher:
@@ -148,18 +160,6 @@ To export the trained model for deployment (e.g., ONNX or TensorRT), run the fol
 - ▶️ **Deployment Script:** [`deploy.sh`](./deploy.sh)
 ['model_onnx'](model.onnx)
 ['model_tet'](model_trt.engine)
-
-### 📂 Shared Paths Used
-
-| Argument           | Description                                          | Example Path                                                     |
-| ------------------ | ---------------------------------------------------- | ---------------------------------------------------------------- |
-| `--cfg`            | Path to YAML config file                             | `config/enhanced_loss_training.yaml` or `config/base_train.yaml` |
-| `--data-path`      | Path to the input dataset                            | `/home-local2/akath.extra.nobkp/dl_challenge`                    |
-| `--output`         | Directory to store logs, checkpoints, visualizations | `/home-local2/akath.extra.nobkp/sereact_enhanced` or `sereact`   |
-| `--resume`         | Checkpoint path for evaluation or deployment         | `/.../ckpt_best.pth`                                             |
-| `--tag`            | Experiment name                                      | `enhanced_loss_data_aug`                                         |
-| `--nproc_per_node` | Number of GPUs used                                  | `1`, `2`, `3`, etc.                                              |
-
 
 
 ## 🏗️ Architecture
