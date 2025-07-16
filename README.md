@@ -22,9 +22,6 @@ A PyTorch-based implementation of 3D object detection using **3DETR (3D Detectio
 
 For a detailed analysis of the results, click here: [`Results Analysis`](RESULTS_ANALYSIS.md)
 
-
-For analysis of the results click [here](MODEL_ANALYSIS_REPORT.md).
-
 <h3 align="center">📊 Quantitative Distribution Analysis</h3>
 
 <p align="center">
