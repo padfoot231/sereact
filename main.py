@@ -330,7 +330,7 @@ def validate(
 
     # For point cloud visualization during evaluation only
     visualization_data = []
-    max_visualizations = 20 # Limit number of visualizations
+    max_visualizations = 5# Limit number of visualizations
 
     logger.info('Starting validation...')
 
@@ -395,6 +395,7 @@ def validate(
     # Log detailed metrics
     logger.info(f"Validation Results:")
     logger.info(f"  Mean IoU: {mean_iou:.4f}")
+    breakpoint()
     for threshold, accuracy in threshold_accuracies.items():
         logger.info(f"  IoU@{threshold}: {accuracy:.4f} ({accuracy*100:.2f}% correct predictions)")
 

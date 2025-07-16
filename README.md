@@ -20,10 +20,15 @@ A PyTorch-based implementation of 3D object detection using **3DETR (3D Detectio
 
 TODO : Add visual results
 
-| Setting              | IoU@0.25   | Mean IoU |
-|----------------------|------------|----------|
-| Without Augmentation | ~0.35–0.40 | **0.47** |
-| With Augmentation    | ~0.35–0.40 | **0.49** |
+<img src="box_distributions.png" alt="Pipeline" width="600"/>
+
+
+<img src="point_cloud_visualisation.png" alt="Pipeline" width="600"/>
+
+| Setting              |  IoU@0.25  |  Mean IoU  |
+|----------------------|------------|------------|
+| Without Augmentation |   0.7950   | **0.4432** |
+| With Augmentation    |   0.8250   | **0.4653** |
 
 ## 📋 Requirements
 

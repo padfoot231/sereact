@@ -21,7 +21,7 @@ class IoUEvaluator:
 
     def __init__(self, iou_thresholds: Optional[List[float]] = None) -> None:
         if iou_thresholds is None:
-            iou_thresholds = [0.25, 0.5]
+            iou_thresholds = [0.25]
         """
         Initialize the IoUEvaluator with specified IoU thresholds.
 

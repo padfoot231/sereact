@@ -85,10 +85,13 @@ A lightweight transformer encoder-decoder enables effective global reasoning ove
 
 ### 4.1 Quantitative Results
 
-| Setting              | IoU\@0.25   | Mean IoU | Training Time/Epoch |
-| -------------------- | ----------- | -------- | ------------------- |
-| Without Augmentation | \~0.35–0.40 | 0.47     | 2m 24s              |
-| With Augmentation    | \~0.35–0.40 | 0.49     | 2m 24s              |
+
+
+
+| Setting              |  IoU\@0.25  |   Mean IoU   | Training Time/Epoch |
+| -------------------- | ----------- | -----------  | ------------------- |
+| Without Augmentation |   0.7950    |  **0.4432**  |        49s          |
+| With Augmentation    |   0.8250    |  **0.4653**  |        49s          |
 
 ### 4.2 Evaluation Metrics
 
