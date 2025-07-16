@@ -17,6 +17,8 @@ import argparse
 from typing import Dict, Any, Tuple
 import numpy.typing as npt
 from matplotlib import pyplot as plt
+import seaborn as sns
+
 
 # Third-party imports
 import numpy as np
@@ -395,7 +397,6 @@ def validate(
     # Log detailed metrics
     logger.info(f"Validation Results:")
     logger.info(f"  Mean IoU: {mean_iou:.4f}")
-    breakpoint()
     for threshold, accuracy in threshold_accuracies.items():
         logger.info(f"  IoU@{threshold}: {accuracy:.4f} ({accuracy*100:.2f}% correct predictions)")
 
@@ -716,102 +717,81 @@ Ground Truth Box Centers:
             except:
                 pass
 
-
 def visualize_box_distributions(
-        predicted_bboxes: npt.NDArray, gt_bboxes: npt.NDArray
-    ) -> None:
-        """Visualize the distribution of predicted vs ground truth box sizes.
+    predicted_bboxes: npt.NDArray,
+    gt_bboxes: npt.NDArray,
+    save_path: str = "box_distributions.png"
+) -> None:
+    """
+    Visualize and compare distributions of predicted vs ground truth 3D bounding boxes.
 
-        Args:
-            predicted_bboxes: shape (num_boxes, 8, 3) - predicted box corners
-            gt_bboxes: shape (num_boxes, 8, 3) - ground truth box corners
-        """
+    Args:
+        predicted_bboxes (np.ndarray): Predicted box corners, shape (N, 8, 3)
+        gt_bboxes (np.ndarray): Ground truth box corners, shape (N, 8, 3)
+        save_path (str): File path to save the generated visualization
+    """
+    sns.set(style="whitegrid")
+    colors = sns.color_palette("Set1", 3)
+    dims_label = ['X', 'Y', 'Z']
 
-        # Compute box dimensions
-        def get_box_dims(boxes: npt.NDArray) -> tuple:
-            # Reshape to (num_boxes, 8, 3)
-            boxes = boxes.reshape(-1, 8, 3)
-            # Get min and max coordinates
-            mins = boxes.min(axis=1)  # (num_boxes, 3)
-            maxs = boxes.max(axis=1)  # (num_boxes, 3)
-            # Compute lengths along each dimension
-            dims = maxs - mins  # (num_boxes, 3)
-            # Compute volumes
-            volumes = dims.prod(axis=1)  # (num_boxes,)
-            return dims, volumes
+    def get_box_dims(boxes: npt.NDArray):
+        boxes = boxes.reshape(-1, 8, 3)
+        mins = boxes.min(axis=1)
+        maxs = boxes.max(axis=1)
+        dims = maxs - mins
+        volumes = dims.prod(axis=1)
+        centers = boxes.mean(axis=1)
+        ratios = dims / (dims.max(axis=1, keepdims=True) + 1e-6)
+        return dims, volumes, centers, ratios
 
-        pred_dims, pred_volumes = get_box_dims(predicted_bboxes)
-        gt_dims, gt_volumes = get_box_dims(gt_bboxes)
+    pred_dims, pred_vols, pred_centers, pred_ratios = get_box_dims(predicted_bboxes)
+    gt_dims, gt_vols, gt_centers, gt_ratios = get_box_dims(gt_bboxes)
 
-        # Create figure with multiple subplots
-        _, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(12, 10))
+    fig, axs = plt.subplots(2, 2, figsize=(14, 10))
 
-        # Plot volume distributions
-        ax1.hist(pred_volumes, bins=20, alpha=0.5, label='Predicted', color='red')
-        ax1.hist(gt_volumes, bins=20, alpha=0.5, label='Ground Truth', color='blue')
-        ax1.set_title('Box Volumes Distribution')
-        ax1.set_xlabel('Volume')
-        ax1.set_ylabel('Count')
-        ax1.legend()
+    # 1. Volume Distribution (Step histograms + means)
+    axs[0, 0].hist(gt_vols, bins=30, histtype='step', label='GT', color='blue', linewidth=2)
+    axs[0, 0].hist(pred_vols, bins=30, histtype='step', label='Pred', color='red', linewidth=2)
+    axs[0, 0].axvline(np.mean(gt_vols), color='blue', linestyle='--', label='GT μ')
+    axs[0, 0].axvline(np.mean(pred_vols), color='red', linestyle='--', label='Pred μ')
+    axs[0, 0].set_title("Box Volume Distribution")
+    axs[0, 0].set_xlabel("Volume")
+    axs[0, 0].set_ylabel("Count")
+    axs[0, 0].legend()
 
-        # Plot dimension distributions
-        dimensions = ['X', 'Y', 'Z']
-        for i, dim in enumerate(dimensions):
-            ax2.hist(pred_dims[:, i], bins=20, alpha=0.5, label=f'Pred {dim}', color=f'C{i}')
-            ax2.hist(
-                gt_dims[:, i], bins=20, alpha=0.5, label=f'GT {dim}', linestyle='--', color=f'C{i}'
-            )
-        ax2.set_title('Box Dimensions Distribution')
-        ax2.set_xlabel('Length')
-        ax2.set_ylabel('Count')
-        ax2.legend()
+    # 2. Box Dimension Distribution (Step + overlayed means)
+    for i in range(3):
+        axs[0, 1].hist(gt_dims[:, i], bins=30, histtype='step', label=f'GT {dims_label[i]}', color=colors[i], linewidth=1.5, linestyle='--')
+        axs[0, 1].hist(pred_dims[:, i], bins=30, histtype='step', label=f'Pred {dims_label[i]}', color=colors[i], linewidth=1.5)
+    axs[0, 1].set_title("Box Dimensions (X, Y, Z)")
+    axs[0, 1].set_xlabel("Dimension Length")
+    axs[0, 1].set_ylabel("Count")
+    axs[0, 1].legend(loc='upper right', fontsize=8)
 
-        # Plot dimension ratios
-        pred_ratios = pred_dims / pred_dims.max(axis=1, keepdims=True)
-        gt_ratios = gt_dims / gt_dims.max(axis=1, keepdims=True)
+    # 3. Normalized Dimension Ratios
+    for i in range(3):
+        axs[1, 0].hist(gt_ratios[:, i], bins=30, histtype='step', label=f'GT {dims_label[i]}', color=colors[i], linestyle='--', linewidth=1.5)
+        axs[1, 0].hist(pred_ratios[:, i], bins=30, histtype='step', label=f'Pred {dims_label[i]}', color=colors[i], linewidth=1.5)
+    axs[1, 0].set_title("Normalized Dimension Ratios")
+    axs[1, 0].set_xlabel("Ratio (dimension / max dimension)")
+    axs[1, 0].set_ylabel("Count")
+    axs[1, 0].legend(loc='upper right', fontsize=8)
 
-        for i, dim in enumerate(dimensions):
-            ax3.hist(pred_ratios[:, i], bins=20, alpha=0.5, label=f'Pred {dim}', color=f'C{i}')
-            ax3.hist(
-                gt_ratios[:, i],
-                bins=20,
-                alpha=0.5,
-                label=f'GT {dim}',
-                linestyle='--',
-                color=f'C{i}',
-            )
-        ax3.set_title('Box Dimension Ratios')
-        ax3.set_xlabel('Ratio to Largest Dimension')
-        ax3.set_ylabel('Count')
-        ax3.legend()
+    # 4. Box Center Positions
+    for i in range(3):
+        axs[1, 1].hist(gt_centers[:, i], bins=30, histtype='step', label=f'GT {dims_label[i]}', color=colors[i], linestyle='--', linewidth=1.5)
+        axs[1, 1].hist(pred_centers[:, i], bins=30, histtype='step', label=f'Pred {dims_label[i]}', color=colors[i], linewidth=1.5)
+    axs[1, 1].set_title("Box Center Coordinates")
+    axs[1, 1].set_xlabel("Coordinate Value")
+    axs[1, 1].set_ylabel("Count")
+    axs[1, 1].legend(loc='upper right', fontsize=8)
 
-        # Plot centers
-        pred_centers = predicted_bboxes.reshape(-1, 8, 3).mean(axis=1)
-        gt_centers = gt_bboxes.reshape(-1, 8, 3).mean(axis=1)
+    plt.tight_layout()
+    plt.savefig(save_path)
+    plt.close()
 
-        for i, dim in enumerate(dimensions):
-            ax4.hist(pred_centers[:, i], bins=20, alpha=0.5, label=f'Pred {dim}', color=f'C{i}')
-            ax4.hist(
-                gt_centers[:, i],
-                bins=20,
-                alpha=0.5,
-                label=f'GT {dim}',
-                linestyle='--',
-                color=f'C{i}',
-            )
-        ax4.set_title('Box Center Positions')
-        ax4.set_xlabel('Position')
-        ax4.set_ylabel('Count')
-        ax4.legend()
-
-        plt.tight_layout()
-
-        # Save the plot
-        plt.savefig('box_distributions.png')
-        plt.close()
-
-        # Log to wandb
-        wandb.log({'box_distributions': wandb.Image('box_distributions.png')})
+    # Log to Weights & Biases
+    wandb.log({'box_distributions': wandb.Image(save_path)})
 
 
 
