@@ -47,6 +47,13 @@ _C.data.transform = None                                                # Data t
 _C.data.debug = False                                                   # Enable debug mode for data loading
 _C.data.augment = False                                                 # Enable data augmentation
 
+# Box-Aware Augmentation Configuration
+_C.data.small_box_boost_prob = 0.3                                     # Probability of small box boosting augmentation
+_C.data.aspect_ratio_aug_prob = 0.4                                    # Probability of aspect ratio augmentation
+_C.data.volume_scaling_prob = 0.2                                      # Probability of volume scaling augmentation
+_C.data.min_box_size = 0.1                                             # Minimum box size threshold for "small" boxes
+_C.data.max_scale_factor = 1.5                                         # Maximum scaling factor for augmentations
+
 # =============================================================================
 # MODEL ARCHITECTURE
 # =============================================================================
@@ -107,6 +114,10 @@ _C.train.weight_decay = 0.01                                            # Weight
 _C.train.filter_biases_wd = True                                        # Filter biases from weight decay
 _C.train.clip_grad = 5.0                                                # Gradient clipping threshold
 _C.train.accumulation_steps = 1                                         # Gradient accumulation steps
+
+# Adaptive Loss Scheduling
+_C.train.loss_adaptation_frequency = 10                                 # Frequency of loss weight adaptation (epochs)
+
 # Memory Optimization
 _C.train.use_checkpoint = False                                         # Use gradient checkpointing to save memory
 
@@ -129,6 +140,13 @@ _C.loss.weights.size = 1.0                                              # Size p
 _C.loss.weights.size_reg = 1.0                                          # Size regularization loss weight
 _C.loss.weights.angle_cls = 0.1                                         # Angle classification loss weight
 _C.loss.weights.angle_reg = 0.1                                         # Angle regression loss weight
+_C.loss.weights.aspect_ratio = 0.5                                      # Aspect ratio loss weight (shape diversity)
+_C.loss.weights.volume_aware = 0.3                                      # Volume-aware loss weight (small box focus)
+
+# Adaptive Loss Thresholds
+_C.loss.small_box_threshold = 0.1                                       # Volume threshold for small boxes
+_C.loss.aspect_ratio_threshold = 0.3                                    # Error threshold for aspect ratios
+_C.loss.volume_error_threshold = 0.5                                    # Error threshold for volume predictions
 
 # =============================================================================
 # SYSTEM AND EXPERIMENT CONFIGURATION
@@ -138,6 +156,7 @@ _C.loss.weights.angle_reg = 0.1                                         # Angle 
 _C.output = ''                                                          # Output directory path
 _C.seed = 0                                                             # Random seed for reproducibility
 _C.eval_mode = False                                                    # Run in evaluation-only mode
+_C.visualize_point_cloud = False                                       # Enable point cloud visualization during evaluation
 _C.print_freq = 10                                                      # Frequency of logging during training
 
 # Training System Configuration
@@ -214,6 +233,8 @@ def update_config(config: CN, args: argparse.Namespace) -> None:
         config.tag = args.tag
     if args.eval:
         config.eval_mode = True
+    if hasattr(args, 'visualize_point_cloud') and args.visualize_point_cloud:
+        config.visualize_point_cloud = True
 
     # Set distributed training configuration
     config.local_rank = args.local_rank

@@ -15,6 +15,8 @@ import random
 import datetime
 import argparse
 from typing import Dict, Any, Tuple
+import numpy.typing as npt
+from matplotlib import pyplot as plt
 
 # Third-party imports
 import numpy as np
@@ -46,6 +48,10 @@ from utils.model_utils import (
     load_checkpoint,
     NativeScalerWithGradNormCount
 )
+from utils.visualize_point_cloud import (
+    visualize_gui_pointcloud_with_bounding_boxes,
+    visualize_bounding_boxes
+)
 
 # Initialize Wandb for experiment tracking
 wandb.init(project="sereact project", entity='padfoot')
@@ -76,6 +82,7 @@ def parse_option() -> Tuple[argparse.Namespace, Any]:
                         help='root of output folder, the full path is <output>/<model_name>/<tag> (default: output)')
     parser.add_argument('--tag', help='tag of experiment')
     parser.add_argument('--eval', action='store_true', help='Perform evaluation only')
+    parser.add_argument('--visualize-point-cloud', action='store_true', help='Enable point cloud visualization during evaluation')
     parser.add_argument('--base_lr', type=float , help="base learning rate")
 
     # distributed training
@@ -136,14 +143,14 @@ def main(config: Any) -> None:
 
     if config.model.resume:
         max_miou = load_checkpoint(config, model_without_ddp, optimizer, scheduler, loss_scaler, logger)
-        miou, _ = validate(config, loss_module, 0, iou_evaluator, data_loader_val, model)
+        miou, _ = validate(loss_module, 0, iou_evaluator, data_loader_val, model, config)
         logger.info(f"Mean iou of the network on the {len(dataset_val)} test images: {miou:.4f}")
         if config.eval_mode:
             return
         
     if config.model.pretrained and (not config.model.resume):
         load_pretrained(config, model_without_ddp, logger)
-        miou, _ = validate(config, loss_module, 0, iou_evaluator, data_loader_val, model)
+        miou, _ = validate(loss_module, 0, iou_evaluator, data_loader_val, model, config)
         logger.info(f"Mean iou of the network on the {len(dataset_val)} test images: {miou:.4f}")
 
         # Model export to low precision formats
@@ -155,7 +162,7 @@ def main(config: Any) -> None:
         train_one_epoch(config, model, loss_module, iou_evaluator, data_loader_train, optimizer, epoch,scheduler,
                         loss_scaler)
 
-        miou, loss = validate(loss_module, epoch, iou_evaluator, data_loader_val, model)
+        miou, loss = validate(loss_module, epoch, iou_evaluator, data_loader_val, model, config)
         
         # if dist.get_rank() == 0 and (epoch % config.save_freq == 0 or epoch == (config.train.max_epoch - 1)):
         save_checkpoint(config, epoch, model_without_ddp, max_miou, miou, optimizer, scheduler, loss_scaler,
@@ -293,7 +300,8 @@ def validate(
     epoch: int,
     iou_evaluator: IoUEvaluator,
     data_loader: DataLoader,
-    model: torch.nn.Module
+    model: torch.nn.Module,
+    config: Any = None
 ) -> Tuple[float, float]:
     """Validate model on validation dataset and return loss and IoU metrics."""
     model.eval()
@@ -304,9 +312,17 @@ def validate(
     end = time.time()
     iou_evaluator.reset()
 
+    # For visualization during evaluation only
+    all_predicted_boxes = []
+    all_gt_boxes = []
+
+    # For point cloud visualization during evaluation only
+    visualization_data = []
+    max_visualizations = 20 # Limit number of visualizations
+
     logger.info('Starting validation...')
 
-    for _, batch_data in enumerate(data_loader):
+    for batch_idx, batch_data in enumerate(data_loader):
         inputs = batch_data['pcd_tensor'].cuda()
         gt_bboxes = batch_data['bbox3d_tensor'].cuda()
         inputs_rgb = batch_data['rgb_tensor'].cuda()
@@ -334,6 +350,26 @@ def validate(
                     pred_boxes=pred_boxes, assignments=assignments, gt_bbox=gt_bboxes
                 )
             )
+
+            # Collect boxes for visualization during evaluation only
+            if config and config.eval_mode:
+                for pred_batch, gt_batch in zip(predicted_bboxes_matched, gt_bboxes_matched):
+                    if pred_batch.size > 0 and gt_batch.size > 0:
+                        all_predicted_boxes.append(pred_batch)
+                        all_gt_boxes.append(gt_batch)
+
+                # Collect point cloud data for visualization if enabled
+                if config.visualize_point_cloud and len(visualization_data) < max_visualizations:
+                    # Store first sample from batch for visualization
+                    sample_data = {
+                        'point_cloud': inputs[0].detach().cpu().numpy(),  # First sample
+                        'rgb_image': inputs_rgb[0].detach().cpu(),        # First RGB sample
+                        'predicted_boxes': predicted_bboxes_matched[0] if len(predicted_bboxes_matched) > 0 else np.array([]),
+                        'gt_boxes': gt_bboxes_matched[0] if len(gt_bboxes_matched) > 0 else np.array([]),
+                        'batch_idx': batch_idx
+                    }
+                    visualization_data.append(sample_data)
+
         iou_evaluator.update(predicted_bboxes_matched, gt_bboxes_matched)
 
         batch_time.update(time.time() - end)
@@ -347,6 +383,69 @@ def validate(
             'val_miou': metrics,
         }
     )
+
+    # Generate box distribution visualization during evaluation only
+    if config and config.eval_mode and all_predicted_boxes and all_gt_boxes:
+        logger.info('Generating bounding box distribution visualization...')
+        try:
+            # Concatenate all collected boxes
+            all_pred = np.concatenate(all_predicted_boxes, axis=0)
+            all_gt = np.concatenate(all_gt_boxes, axis=0)
+
+            # Reshape from (N, 24) to (N, 8, 3) if needed
+            if all_pred.shape[1] == 24:
+                all_pred = all_pred.reshape(-1, 8, 3)
+            if all_gt.shape[1] == 24:
+                all_gt = all_gt.reshape(-1, 8, 3)
+
+            # Call visualization function
+            visualize_box_distributions(all_pred, all_gt)
+            logger.info('Box distribution visualization saved successfully!')
+
+        except Exception as e:
+            logger.warning(f'Failed to generate box distribution visualization: {e}')
+
+    # Generate point cloud visualizations during evaluation only
+    if config and config.eval_mode and config.visualize_point_cloud and visualization_data:
+        logger.info('Generating point cloud visualizations...')
+        try:
+            for i, vis_data in enumerate(visualization_data):
+                logger.info(f'Visualizing sample {i+1}/{len(visualization_data)} from batch {vis_data["batch_idx"]}')
+
+                # Reshape point cloud if needed
+                point_cloud = vis_data['point_cloud']
+                if len(point_cloud.shape) == 3:
+                    point_cloud = point_cloud.transpose(1, 2, 0).reshape(-1, 3)
+
+                # Get bounding boxes
+                pred_boxes = vis_data['predicted_boxes']
+                gt_boxes = vis_data['gt_boxes']
+
+                # Only visualize if we have both predicted and GT boxes
+                if pred_boxes.size > 0 and gt_boxes.size > 0:
+                    # Reshape boxes if needed (from (N, 24) to (N, 8, 3))
+                    if len(pred_boxes.shape) == 2 and pred_boxes.shape[1] == 24:
+                        pred_boxes = pred_boxes.reshape(-1, 8, 3)
+                    if len(gt_boxes.shape) == 2 and gt_boxes.shape[1] == 24:
+                        gt_boxes = gt_boxes.reshape(-1, 8, 3)
+
+                    # Save point cloud visualization as image
+                    save_path = f"point_cloud_sample_{i+1}_batch_{vis_data['batch_idx']}.png"
+                    save_point_cloud_visualization(
+                        point_cloud=point_cloud,
+                        rgb_tensor=vis_data['rgb_image'],
+                        predicted_boxes=pred_boxes,
+                        gt_boxes=gt_boxes,
+                        save_path=save_path
+                    )
+                else:
+                    logger.info(f'Skipping visualization for sample {i+1} - no valid boxes')
+
+            logger.info('Point cloud visualizations completed!')
+
+        except Exception as e:
+            logger.warning(f'Failed to generate point cloud visualizations: {e}')
+
     return metrics, loss_meter.avg
 
 
@@ -437,6 +536,259 @@ def get_predicted_and_gt_boxes_from_assignments(
             gt_batched.append(np.empty((0, 24)))
 
     return predicted_batched, gt_batched
+
+def save_point_cloud_visualization(
+        point_cloud: npt.NDArray,
+        rgb_tensor: torch.Tensor,
+        predicted_boxes: npt.NDArray,
+        gt_boxes: npt.NDArray,
+        save_path: str = "point_cloud_visualization.png"
+    ) -> None:
+        """
+        Save point cloud visualization with bounding boxes as image file using matplotlib.
+        Truly headless - no display system required.
+
+        Args:
+            point_cloud: (N, 3) point cloud coordinates
+            rgb_tensor: (3, H, W) RGB tensor for coloring
+            predicted_boxes: (M, 8, 3) predicted bounding box corners
+            gt_boxes: (K, 8, 3) ground truth bounding box corners
+            save_path: Path to save the visualization image
+        """
+        try:
+            import matplotlib
+            matplotlib.use('Agg')  # Use non-interactive backend
+            import matplotlib.pyplot as plt
+
+            # Create figure with 3D subplot
+            fig = plt.figure(figsize=(16, 12))
+            ax = fig.add_subplot(111, projection='3d')
+
+            # Plot point cloud
+            if point_cloud.size > 0:
+                # Subsample points for better visualization performance
+                max_points = 5000
+                if point_cloud.shape[0] > max_points:
+                    indices = np.random.choice(point_cloud.shape[0], max_points, replace=False)
+                    pc_vis = point_cloud[indices]
+                else:
+                    pc_vis = point_cloud
+
+                # Get RGB colors if available
+                if rgb_tensor is not None:
+                    rgb_points = rgb_tensor.permute(1, 2, 0).detach().cpu().numpy()
+                    rgb_points = rgb_points.reshape(-1, 3)
+                    if rgb_points.shape[0] == point_cloud.shape[0]:
+                        if point_cloud.shape[0] > max_points:
+                            colors = rgb_points[indices]
+                        else:
+                            colors = rgb_points
+                        ax.scatter(pc_vis[:, 0], pc_vis[:, 1], pc_vis[:, 2],
+                                 c=colors, s=1, alpha=0.6)
+                    else:
+                        ax.scatter(pc_vis[:, 0], pc_vis[:, 1], pc_vis[:, 2],
+                                 c='lightblue', s=1, alpha=0.6)
+                else:
+                    ax.scatter(pc_vis[:, 0], pc_vis[:, 1], pc_vis[:, 2],
+                             c='lightblue', s=1, alpha=0.6)
+
+            # Function to draw a 3D bounding box
+            def draw_bbox(corners, color):
+                if corners.size == 0:
+                    return
+
+                # Define the 12 edges of a cube
+                edges = [
+                    [0, 1], [1, 2], [2, 3], [3, 0],  # bottom face
+                    [4, 5], [5, 6], [6, 7], [7, 4],  # top face
+                    [0, 4], [1, 5], [2, 6], [3, 7]   # vertical edges
+                ]
+
+                for edge in edges:
+                    points = corners[edge]
+                    ax.plot3D(points[:, 0], points[:, 1], points[:, 2],
+                             color=color, linewidth=2, alpha=0.8)
+
+            # Draw predicted bounding boxes (red)
+            for box_corners in predicted_boxes:
+                if box_corners.size > 0:
+                    draw_bbox(box_corners, 'red')
+
+            # Draw ground truth bounding boxes (green)
+            for box_corners in gt_boxes:
+                if box_corners.size > 0:
+                    draw_bbox(box_corners, 'green')
+
+            # Set labels and title
+            ax.set_xlabel('X')
+            ax.set_ylabel('Y')
+            ax.set_zlabel('Z')
+            ax.set_title('3D Point Cloud with Bounding Boxes\n(Red: Predicted, Green: Ground Truth)')
+
+            # Set equal aspect ratio
+            if point_cloud.size > 0:
+                max_range = np.array([
+                    point_cloud[:, 0].max() - point_cloud[:, 0].min(),
+                    point_cloud[:, 1].max() - point_cloud[:, 1].min(),
+                    point_cloud[:, 2].max() - point_cloud[:, 2].min()
+                ]).max() / 2.0
+
+                mid_x = (point_cloud[:, 0].max() + point_cloud[:, 0].min()) * 0.5
+                mid_y = (point_cloud[:, 1].max() + point_cloud[:, 1].min()) * 0.5
+                mid_z = (point_cloud[:, 2].max() + point_cloud[:, 2].min()) * 0.5
+
+                ax.set_xlim(mid_x - max_range, mid_x + max_range)
+                ax.set_ylim(mid_y - max_range, mid_y + max_range)
+                ax.set_zlim(mid_z - max_range, mid_z + max_range)
+
+            # Add legend
+            from matplotlib.lines import Line2D
+            legend_elements = [
+                Line2D([0], [0], color='red', lw=2, label='Predicted Boxes'),
+                Line2D([0], [0], color='green', lw=2, label='Ground Truth Boxes'),
+                Line2D([0], [0], marker='o', color='lightblue', lw=0,
+                       markersize=5, label='Point Cloud')
+            ]
+            ax.legend(handles=legend_elements, loc='upper right')
+
+            # Save the figure
+            plt.tight_layout()
+            plt.savefig(save_path, dpi=150, bbox_inches='tight')
+            plt.close()
+
+            logger.info(f"Point cloud visualization saved to: {save_path}")
+
+            # Log to wandb if available
+            try:
+                wandb.log({f'point_cloud_viz_{save_path.split("/")[-1]}': wandb.Image(save_path)})
+            except:
+                pass  # Ignore wandb errors
+
+        except Exception as e:
+            logger.warning(f"Failed to save point cloud visualization: {e}")
+            # Create a simple text summary as fallback
+            try:
+                summary = f"""
+Point Cloud Visualization Summary
+================================
+Point Cloud: {point_cloud.shape[0]} points
+Predicted Boxes: {len(predicted_boxes)}
+Ground Truth Boxes: {len(gt_boxes)}
+
+Point Cloud Range:
+  X: [{point_cloud[:, 0].min():.3f}, {point_cloud[:, 0].max():.3f}]
+  Y: [{point_cloud[:, 1].min():.3f}, {point_cloud[:, 1].max():.3f}]
+  Z: [{point_cloud[:, 2].min():.3f}, {point_cloud[:, 2].max():.3f}]
+
+Predicted Box Centers:
+{[f"  Box {i}: [{box.mean(axis=0)[0]:.3f}, {box.mean(axis=0)[1]:.3f}, {box.mean(axis=0)[2]:.3f}]" for i, box in enumerate(predicted_boxes) if box.size > 0]}
+
+Ground Truth Box Centers:
+{[f"  Box {i}: [{box.mean(axis=0)[0]:.3f}, {box.mean(axis=0)[1]:.3f}, {box.mean(axis=0)[2]:.3f}]" for i, box in enumerate(gt_boxes) if box.size > 0]}
+"""
+                with open(save_path.replace('.png', '_summary.txt'), 'w') as f:
+                    f.write(summary)
+                logger.info(f"Saved visualization summary to: {save_path.replace('.png', '_summary.txt')}")
+            except:
+                pass
+
+
+def visualize_box_distributions(
+        predicted_bboxes: npt.NDArray, gt_bboxes: npt.NDArray
+    ) -> None:
+        """Visualize the distribution of predicted vs ground truth box sizes.
+
+        Args:
+            predicted_bboxes: shape (num_boxes, 8, 3) - predicted box corners
+            gt_bboxes: shape (num_boxes, 8, 3) - ground truth box corners
+        """
+
+        # Compute box dimensions
+        def get_box_dims(boxes: npt.NDArray) -> tuple:
+            # Reshape to (num_boxes, 8, 3)
+            boxes = boxes.reshape(-1, 8, 3)
+            # Get min and max coordinates
+            mins = boxes.min(axis=1)  # (num_boxes, 3)
+            maxs = boxes.max(axis=1)  # (num_boxes, 3)
+            # Compute lengths along each dimension
+            dims = maxs - mins  # (num_boxes, 3)
+            # Compute volumes
+            volumes = dims.prod(axis=1)  # (num_boxes,)
+            return dims, volumes
+
+        pred_dims, pred_volumes = get_box_dims(predicted_bboxes)
+        gt_dims, gt_volumes = get_box_dims(gt_bboxes)
+
+        # Create figure with multiple subplots
+        _, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(12, 10))
+
+        # Plot volume distributions
+        ax1.hist(pred_volumes, bins=20, alpha=0.5, label='Predicted', color='red')
+        ax1.hist(gt_volumes, bins=20, alpha=0.5, label='Ground Truth', color='blue')
+        ax1.set_title('Box Volumes Distribution')
+        ax1.set_xlabel('Volume')
+        ax1.set_ylabel('Count')
+        ax1.legend()
+
+        # Plot dimension distributions
+        dimensions = ['X', 'Y', 'Z']
+        for i, dim in enumerate(dimensions):
+            ax2.hist(pred_dims[:, i], bins=20, alpha=0.5, label=f'Pred {dim}', color=f'C{i}')
+            ax2.hist(
+                gt_dims[:, i], bins=20, alpha=0.5, label=f'GT {dim}', linestyle='--', color=f'C{i}'
+            )
+        ax2.set_title('Box Dimensions Distribution')
+        ax2.set_xlabel('Length')
+        ax2.set_ylabel('Count')
+        ax2.legend()
+
+        # Plot dimension ratios
+        pred_ratios = pred_dims / pred_dims.max(axis=1, keepdims=True)
+        gt_ratios = gt_dims / gt_dims.max(axis=1, keepdims=True)
+
+        for i, dim in enumerate(dimensions):
+            ax3.hist(pred_ratios[:, i], bins=20, alpha=0.5, label=f'Pred {dim}', color=f'C{i}')
+            ax3.hist(
+                gt_ratios[:, i],
+                bins=20,
+                alpha=0.5,
+                label=f'GT {dim}',
+                linestyle='--',
+                color=f'C{i}',
+            )
+        ax3.set_title('Box Dimension Ratios')
+        ax3.set_xlabel('Ratio to Largest Dimension')
+        ax3.set_ylabel('Count')
+        ax3.legend()
+
+        # Plot centers
+        pred_centers = predicted_bboxes.reshape(-1, 8, 3).mean(axis=1)
+        gt_centers = gt_bboxes.reshape(-1, 8, 3).mean(axis=1)
+
+        for i, dim in enumerate(dimensions):
+            ax4.hist(pred_centers[:, i], bins=20, alpha=0.5, label=f'Pred {dim}', color=f'C{i}')
+            ax4.hist(
+                gt_centers[:, i],
+                bins=20,
+                alpha=0.5,
+                label=f'GT {dim}',
+                linestyle='--',
+                color=f'C{i}',
+            )
+        ax4.set_title('Box Center Positions')
+        ax4.set_xlabel('Position')
+        ax4.set_ylabel('Count')
+        ax4.legend()
+
+        plt.tight_layout()
+
+        # Save the plot
+        plt.savefig('box_distributions.png')
+        plt.close()
+
+        # Log to wandb
+        wandb.log({'box_distributions': wandb.Image('box_distributions.png')})
+
 
 
 if __name__ == '__main__':

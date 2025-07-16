@@ -17,11 +17,11 @@ export CUDNN_DETERMINISTIC=1
 
 
 python -m torch.distributed.launch \
---nproc_per_node 1 --eval \
---master_port 12346  main.py \
+--nproc_per_node 1 \
+--master_port 12346  main.py  --eval \
 --cfg config/base_train.yaml \
 --output /home-local2/akath.extra.nobkp/sereact \
 --data-path /home-local2/akath.extra.nobkp/dl_challenge \
---resume /home-local2/akath.extra.nobkp/sereact/ckpt_epoch_best_new_resume.pth \
+--resume /home-local2/akath.extra.nobkp/sereact/3DDETR/no_augmentation/ckpt_best.pth \
 --batch-size 2
 # --pretrained /home-local2/akath.extra.nobkp/scannet_ep1080.pth

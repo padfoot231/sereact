@@ -1,0 +1,82 @@
+# Enhanced Loss Training Configuration
+# Focuses on improved loss functions for better box prediction
+
+seed: 42
+
+# Training configuration
+train:
+  start_epoch: 0
+  max_epoch: 250
+  base_lr: 0.0001
+  warm_lr: 5e-6
+  warm_lr_epochs: 12
+  final_lr: 1e-7
+  lr_scheduler: cosine
+  weight_decay: 0.008
+  filter_biases_wd: True
+  clip_grad: 0.3
+  loss_adaptation_frequency: 15
+
+# Data configuration
+data:
+  batch_size: 2
+  num_workers: 4
+  # Box-aware augmentation settings (conservative values)
+  small_box_boost_prob: 0.2
+  aspect_ratio_aug_prob: 0.3
+  volume_scaling_prob: 0.15
+  min_box_size: 0.12
+  max_scale_factor: 1.3
+
+# Model configuration
+model:
+  encoder:
+    dim: 256
+    nheads: 4
+    ffn_dim: 128
+    dropout: 0.1
+    activation: relu
+    num_layers: 3
+    type: vanilla
+    preencoder_npoints: 2048
+    use_color: false
+  decoder:
+    dim: 256
+    nhead: 4
+    ffn_dim: 256
+    dropout: 0.1
+    num_layers: 3
+  position_embedding: fourier
+  mlp_dropout: 0.3
+  num_queries: 256
+  num_angular_bins: 1
+  pretrained_weights_path: "/home-local2/akath.extra.nobkp/scannet_ep1080.pth"
+
+# Enhanced loss configuration with new loss functions
+loss:
+  # Matcher costs
+  matcher_costs:
+    giou: 5.0
+    cost_box_corners: 1.0
+    l1: 2.0
+  
+  # Enhanced loss weights
+  weights:
+    giou: 1.5                    # Slightly increased
+    box_corners: 1.2             # Slightly increased
+    size: 1.0                    # Keep original
+    size_reg: 1.0                # Keep original
+    angle_cls: 0.1
+    angle_reg: 0.1
+    aspect_ratio: 0.4            # NEW: Moderate weight for aspect ratio
+    volume_aware: 0.3            # NEW: Moderate weight for volume awareness
+  
+  # Adaptive loss thresholds
+  small_box_threshold: 0.12
+  aspect_ratio_threshold: 0.3
+  volume_error_threshold: 0.5
+
+# System configuration
+output: '/home-local2/akath.extra.nobkp/sereact_enhanced'
+print_freq: 10
+save_freq: 5

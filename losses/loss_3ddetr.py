@@ -153,6 +153,8 @@ class SetCriterion(nn.Module):
             'loss_size': self.loss_size,
             'loss_size_reg': self.loss_size_regularization,
             'loss_angle': self.loss_angle,
+            'loss_aspect_ratio': self.loss_aspect_ratio,
+            'loss_volume_aware': self.loss_volume_aware,
         }
 
     def loss_angle(
@@ -398,6 +400,108 @@ class SetCriterion(nn.Module):
 
         return {'loss_box_corners': box_corners_loss}
 
+    def loss_aspect_ratio(
+        self, outputs: dict, gt_bbox_corners: torch.Tensor, assignments: dict
+    ) -> dict:
+        """
+        Aspect ratio aware loss to encourage better shape diversity.
+        Penalizes predictions that don't match GT aspect ratios.
+        """
+        predicted_box_corners = outputs['box_corners']  # (B, N_q, 8, 3)
+
+        if assignments['proposal_matched_mask'].sum() > 0:
+            # Get matched GT corners
+            matched_gt_box_corners = torch.gather(
+                gt_bbox_corners,
+                1,
+                assignments['per_prop_gt_inds'].unsqueeze(-1).unsqueeze(-1).expand(-1, -1, 8, 3),
+            )
+
+            # Compute box dimensions from corners
+            def get_box_dimensions(corners):
+                # corners: (B, N_q, 8, 3)
+                mins = corners.min(dim=2)[0]  # (B, N_q, 3)
+                maxs = corners.max(dim=2)[0]  # (B, N_q, 3)
+                dims = maxs - mins  # (B, N_q, 3) - [length, width, height]
+                return dims
+
+            pred_dims = get_box_dimensions(predicted_box_corners)
+            gt_dims = get_box_dimensions(matched_gt_box_corners)
+
+            # Compute aspect ratios (normalize by largest dimension)
+            pred_dims_norm = pred_dims / (pred_dims.max(dim=-1, keepdim=True)[0] + 1e-6)
+            gt_dims_norm = gt_dims / (gt_dims.max(dim=-1, keepdim=True)[0] + 1e-6)
+
+            # L1 loss on normalized aspect ratios
+            aspect_ratio_loss = F.l1_loss(
+                pred_dims_norm, gt_dims_norm, reduction='none'
+            ).sum(dim=-1)
+
+            # Apply mask and normalize
+            aspect_ratio_loss *= assignments['proposal_matched_mask']
+            aspect_ratio_loss = aspect_ratio_loss.sum()
+
+            # Normalize by number of matched proposals
+            num_matched = assignments['proposal_matched_mask'].sum()
+            if num_matched > 0:
+                aspect_ratio_loss /= num_matched
+        else:
+            aspect_ratio_loss = torch.zeros(1, device=predicted_box_corners.device).squeeze()
+
+        return {'loss_aspect_ratio': aspect_ratio_loss}
+
+    def loss_volume_aware(
+        self, outputs: dict, gt_bbox_corners: torch.Tensor, assignments: dict
+    ) -> dict:
+        """
+        Volume-aware loss that gives higher weight to small boxes.
+        Addresses the under-prediction of small volumes.
+        """
+        predicted_box_corners = outputs['box_corners']  # (B, N_q, 8, 3)
+
+        if assignments['proposal_matched_mask'].sum() > 0:
+            # Get matched GT corners
+            matched_gt_box_corners = torch.gather(
+                gt_bbox_corners,
+                1,
+                assignments['per_prop_gt_inds'].unsqueeze(-1).unsqueeze(-1).expand(-1, -1, 8, 3),
+            )
+
+            # Compute volumes
+            def get_box_volume(corners):
+                mins = corners.min(dim=2)[0]  # (B, N_q, 3)
+                maxs = corners.max(dim=2)[0]  # (B, N_q, 3)
+                dims = maxs - mins  # (B, N_q, 3)
+                volume = dims.prod(dim=-1)  # (B, N_q)
+                return volume, dims
+
+            pred_volume, pred_dims = get_box_volume(predicted_box_corners)
+            gt_volume, gt_dims = get_box_volume(matched_gt_box_corners)
+
+            # Volume-weighted L1 loss (higher weight for smaller boxes)
+            volume_weights = 1.0 / (gt_volume + 1e-3)  # Inverse volume weighting
+            volume_weights = torch.clamp(volume_weights, max=10.0)  # Cap the weights
+
+            # L1 loss on log volumes (more stable for small volumes)
+            volume_loss = F.l1_loss(
+                torch.log(pred_volume + 1e-6),
+                torch.log(gt_volume + 1e-6),
+                reduction='none'
+            )
+
+            # Apply volume weighting and mask
+            volume_loss = volume_loss * volume_weights * assignments['proposal_matched_mask']
+            volume_loss = volume_loss.sum()
+
+            # Normalize by weighted number of matched proposals
+            weighted_matched = (volume_weights * assignments['proposal_matched_mask']).sum()
+            if weighted_matched > 0:
+                volume_loss /= weighted_matched
+        else:
+            volume_loss = torch.zeros(1, device=predicted_box_corners.device).squeeze()
+
+        return {'loss_volume_aware': volume_loss}
+
     def single_output_forward(
         self, outputs: dict, targets: torch.Tensor, epoch: int
     ) -> Tuple[torch.Tensor, dict, dict]:
@@ -521,6 +625,8 @@ class LossFunction(nn.Module):
             'loss_size_reg_weight': config.loss.weights.size_reg,
             'loss_angle_cls_weight': config.loss.weights.angle_cls,
             'loss_angle_reg_weight': config.loss.weights.angle_reg,
+            'loss_aspect_ratio_weight': getattr(config.loss.weights, 'aspect_ratio', 0.5),
+            'loss_volume_aware_weight': getattr(config.loss.weights, 'volume_aware', 0.3),
         }
         # Define the criterion
         self.criterion = SetCriterion(matcher_loss=matcher_loss, loss_weight_dict=loss_weight_dict)
