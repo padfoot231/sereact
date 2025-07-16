@@ -4,7 +4,7 @@
 
 A PyTorch-based implementation of 3D object detection using **3DETR (3D Detection Transformer)** with RGB–PointCloud fusion. This project combines 3D point cloud data and 2D RGB images to improve 3D bounding box prediction and orientation estimation accuracy.
 
-📄 For detailed explanation and architecture overview, see [`myLib/README.md`](SUBMISSION.md).
+📄 For detailed explanation and architecture overview, see [`Submission Report`](SUBMISSION_REPORT.md).
 
 
 ## 🚀 Features
@@ -295,7 +295,7 @@ python main.py \
 3. **Decoder**: Transformer decoder for object queries
 4. **Prediction Heads**: Box regression, classification, and angle prediction
 
-### Loss Functions (losses/LOSS_FUNCTIONS_GUIDE.md)
+### [Loss Functions](losses/LOSS_FUNCTIONS_GUIDE.md)
 - **GIoU Loss**: Generalized IoU for 3D bounding boxes
 - **Box Corner Loss**: L1 loss for corner accuracy
 - **Size Loss**: L1 loss for size prediction
