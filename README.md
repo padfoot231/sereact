@@ -18,7 +18,9 @@ A PyTorch-based implementation of 3D object detection using **3DETR (3D Detectio
 
 ### 📈 Experimental Results 
 
-TODO : Analysis of visual results
+For analysis of the results click [here](MODEL_ANALYSIS_REPORT.md).
+
+<h3 align="center">📊 Quantitative Distribution Analysis</h3>
 
 <p align="center">
   <img src="box_distributions.png" alt="Box Distributions" width="51%"/>
@@ -26,9 +28,26 @@ TODO : Analysis of visual results
 </p>
 
 <p align="center">
-  <img src="validation_miou.png" alt="Validation mIoU" width="45%" />
-  <img src="Train_loss.png" alt="Train Loss" width="45%" />
+  <em>Left:</em> Distributions of predicted vs. ground truth bounding box volumes, dimensions, ratios, and centers highlight model biases in shape, scale, and localization.  
+  <br>
+  <em>Right:</em> 3D point cloud visualization with predicted (red) and ground truth (green) bounding boxes showing spatial alignment and detection accuracy.
 </p>
+
+---
+
+<h3 align="center">📈 Model Performance Over Time</h3>
+
+<p align="center">
+  <img src="validation_miou.png" alt="Validation mIoU" width="48%"/>
+  <img src="Train_loss.png" alt="Train Loss" width="48%"/>
+</p>
+
+<p align="center">
+  <em>Left:</em> Validation Mean IoU curve showing convergence and stability of segmentation performance over training epochs.  
+  <br>
+  <em>Right:</em> Training loss curve indicating model learning dynamics and optimization progress during training.
+</p>
+
 
 
 | Setting              |  IoU@0.25  |  Mean IoU  |
