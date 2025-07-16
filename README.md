@@ -4,7 +4,9 @@
 
 A PyTorch-based implementation of 3D object detection using **3DETR (3D Detection Transformer)** with RGB–PointCloud fusion. This project combines 3D point cloud data and 2D RGB images to improve 3D bounding box prediction and orientation estimation accuracy.
 
-📄 For detailed explanation and architecture overview, see [`Submission Report`](SUBMISSION_REPORT.md).
+📄 For a detailed explanation and architecture overview, see the [`Submission Report`](SUBMISSION_REPORT.md).  
+🚀 To get started with installation and setup, refer to the [`Get Started`](GET_STARTED.md) guide.
+
 
 
 ## 🚀 Features
@@ -16,7 +18,10 @@ A PyTorch-based implementation of 3D object detection using **3DETR (3D Detectio
 - **CUDA Extensions**: Optimized PointNet++ operations
 - **Comprehensive Loss Functions**: GIoU, angle, size, and corner losses
 
-### 📈 Experimental Results 
+### 📈 Experimental Results
+
+For a detailed analysis of the results, click here: [`Results Analysis`](RESULTS_ANALYSIS.md)
+
 
 For analysis of the results click [here](MODEL_ANALYSIS_REPORT.md).
 
@@ -43,9 +48,9 @@ For analysis of the results click [here](MODEL_ANALYSIS_REPORT.md).
 </p>
 
 <p align="center">
-  <em>Left:</em> Validation Mean IoU curve showing convergence and stability of segmentation performance over training epochs.  
+  <em>Left:</em> Validation Mean IoU curve over training iterations.  
   <br>
-  <em>Right:</em> Training loss curve indicating model learning dynamics and optimization progress during training.
+  <em>Right:</em> Training loss curve during training over training iterations.
 </p>
 
 
@@ -70,103 +75,6 @@ Ensure CUDA toolkit is installed and accessible:
 ```bash
 nvcc --version  # Should show CUDA 10.2 or 11.1
 ```
-
-## 🛠️ Installation
-
-### 1. Create Python Environment
-
-```bash
-# Create conda environment with Python 3.7.16
-conda create -n sereact python=3.7.16 -y
-conda activate sereact
-
-# Install PyTorch 1.8.0 with CUDA 10.2
-conda install pytorch==1.8.0 torchvision==0.9.0 cudatoolkit=10.2 -c pytorch
-
-# Verify PyTorch installation
-python -c "import torch; print(f'PyTorch {torch.__version__} - CUDA: {torch.cuda.is_available()}')"
-```
-
-### 2. Install Dependencies
-
-```bash
-# Install required packages
-pip install -r requirements.txt
-```
-
-### 3. Build CUDA Extensions
-
-The project includes custom CUDA extensions for PointNet++ operations that need to be compiled:
-
-```bash
-# Navigate to CUDA extensions directory
-cd models/detr3d/_ext_src
-
-# Build CUDA extensions
-python3 setup.py build_ext --inplace
-
-# Verify compilation
-python -c "import _ext_src; print('CUDA extensions compiled successfully!')"
-
-# Return to project root
-cd ../../..
-```
-
-### 4. Verify Installation
-
-```bash
-# Test all imports
-python -c "
-import torch
-import torchvision
-import numpy as np
-from models.detr3d.model_3ddetr import build_3ddetr_model
-from models.detr3d._ext_src import _ext_src
-print('✅ All components imported successfully!')
-print(f'PyTorch: {torch.__version__}')
-print(f'CUDA available: {torch.cuda.is_available()}')
-"
-```
-
-### 5. TensorRT Installation (Optional - For Model Optimization)
-
-TensorRT converts trained models to optimized inference engines. **Manual download required from NVIDIA.**
-
-#### Quick Installation Steps
-
-1. **Download from NVIDIA** (free account required):
-   - Visit: https://developer.nvidia.com/tensorrt
-   - Download: `TensorRT-8.2.1.8.Linux.x86_64-gnu.cuda-11.1.cudnn8.2.tar.gz`
-
-2. **Extract and Install**:
-```bash
-mkdir -p ~/tensorrt && cd ~/tensorrt
-tar -xzf TensorRT-8.2.1.8.Linux.x86_64-gnu.cuda-11.1.cudnn8.2.tar.gz
-cd TensorRT-8.2.1.8/python
-pip install tensorrt-8.2.1.8-cp37-none-linux_x86_64.whl
-```
-
-3. **Fix Library Paths** (fixes common import errors):
-```bash
-# Add to ~/.bashrc
-echo 'export LD_LIBRARY_PATH=~/tensorrt/TensorRT-8.2.1.8/lib:$LD_LIBRARY_PATH' >> ~/.bashrc
-echo 'export LD_LIBRARY_PATH=$(python -c "import torch; print(torch.__path__[0])")/lib:$LD_LIBRARY_PATH' >> ~/.bashrc
-source ~/.bashrc
-```
-
-4. **Test Installation**:
-```bash
-python -c "import tensorrt as trt; print(f'TensorRT {trt.__version__} ready!')"
-```
-
-#### Common Errors & Quick Fixes
-
-**Error**: `ImportError: libcudnn.so.8: cannot open shared object file`
-**Fix**: `export LD_LIBRARY_PATH=$(python -c "import torch; print(torch.__path__[0])")/lib:$LD_LIBRARY_PATH`
-
-**Error**: `ImportError: libnvinfer.so.8: cannot open shared object file`
-**Fix**: `export LD_LIBRARY_PATH=~/tensorrt/TensorRT-8.2.1.8/lib:$LD_LIBRARY_PATH`
-
 
 #### Version Compatibility Matrix
 
@@ -223,51 +131,41 @@ train:
 
 ## 🚀 Training
 
-### Single GPU Training
-```bash
-python main.py \
-  --cfg config/base_train.yaml \
-  --data-path /path/to/dataset \
-  --batch-size 1 \
-  --local_rank 0
-```
+To train the model using 3 GPUs, run the following command or make changes in train.sh file:
 
-### Multi-GPU Distributed Training
-```bash
-python -m torch.distributed.launch \
-  --nproc_per_node 2 \
-  --master_port 12346 \
-  main.py \
-  --cfg config/base_train.yaml \
-  --data-path /path/to/dataset \
-  --batch-size 1
-```
+## 🏋️‍♂️ Training
 
-### Training Script
-Create `train.sh`:
-```bash
-#!/bin/bash
-export WANDB_MODE="disabled"
-export CUDA_VISIBLE_DEVICES=0,1
+To train the model, run the script below or use the pre-written launcher:
 
-python -m torch.distributed.launch \
---nproc_per_node 2 \
---master_port 12346 \
-main.py \
---cfg config/base_train.yaml \
---data-path /path/to/dataset \
---batch-size 1
-```
+- ▶️ **Training Script:** [`train.sh`](./train.sh)
 
-## 🧪 Evaluation
+### 🔍 Evaluation Scripts
 
-```bash
-python main.py \
-  --cfg config/base_train.yaml \
-  --data-path /path/to/dataset \
-  --eval \
-  --pretrained /path/to/checkpoint.pth
-```
+- ▶️ **With Visualization:** [`eval_visualisation.sh`](./eval_visualisation.sh)  
+  Runs evaluation with **point cloud visualizations** and **box distribution plots**.
+
+- ▶️ **Without Visualization:** [`eval.sh`](./eval.sh)  
+  Standard evaluation script without rendering visual outputs.
+
+
+## 🚀 Deployment
+
+To export the trained model for deployment (e.g., ONNX or TensorRT), run the following script:
+
+- ▶️ **Deployment Script:** [`deploy.sh`](./deploy.sh)
+
+### 📂 Shared Paths Used
+
+| Argument           | Description                                          | Example Path                                                     |
+| ------------------ | ---------------------------------------------------- | ---------------------------------------------------------------- |
+| `--cfg`            | Path to YAML config file                             | `config/enhanced_loss_training.yaml` or `config/base_train.yaml` |
+| `--data-path`      | Path to the input dataset                            | `/home-local2/akath.extra.nobkp/dl_challenge`                    |
+| `--output`         | Directory to store logs, checkpoints, visualizations | `/home-local2/akath.extra.nobkp/sereact_enhanced` or `sereact`   |
+| `--resume`         | Checkpoint path for evaluation or deployment         | `/.../ckpt_best.pth`                                             |
+| `--tag`            | Experiment name                                      | `enhanced_loss_data_aug`                                         |
+| `--nproc_per_node` | Number of GPUs used                                  | `1`, `2`, `3`, etc.                                              |
+
+
 
 ## 🏗️ Architecture
 

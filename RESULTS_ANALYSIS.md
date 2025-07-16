@@ -9,12 +9,11 @@ This report analyzes the performance of the 3DETR-based 3D object detection mode
 ## 📈 **Performance Overview**
 
 ### **Current Metrics**
-| Metric | Value | Target | Status |
-|--------|-------|--------|--------|
-| Mean IoU | 0.47-0.49 | >0.60 | 🔴 Below Target |
-| IoU@0.25 | 0.35-0.40 | >0.70 | 🔴 Below Target |
-| Training Time/Epoch | 49s | <2m | ✅ Good |
-| Model Size | 4.49M params | <100M | ✅ Excellent |
+| Metric | Value | Target | 
+|--------|-------|--------|
+| Mean IoU | 0.47-0.49 | >0.60 | 
+| Training Time/Epoch | 49s |
+| Model Size | 4.49M params |
 
 ### **Key Findings**
 - **Moderate Performance**: Model achieves reasonable but not exceptional IoU scores
@@ -110,31 +109,6 @@ This report analyzes the performance of the 3DETR-based 3D object detection mode
 
 ---
 
-## 📊 **Performance Breakdown by Object Characteristics**
-
-### **By Object Size**
-| Size Category | IoU Performance | Issues |
-|---------------|----------------|---------|
-| Large (>1.0 vol) | 0.65-0.75 | ✅ Good performance |
-| Medium (0.3-1.0 vol) | 0.45-0.55 | 🟡 Moderate issues |
-| Small (<0.3 vol) | 0.20-0.35 | 🔴 Significant problems |
-
-### **By Aspect Ratio**
-| Shape Type | IoU Performance | Issues |
-|------------|----------------|---------|
-| Cubic (1:1:1) | 0.55-0.65 | ✅ Best performance |
-| Elongated (>3:1) | 0.30-0.40 | 🔴 Poor shape fitting |
-| Flat (<1:3) | 0.25-0.35 | 🔴 Height under-estimation |
-
-### **By Point Cloud Density**
-| Density | IoU Performance | Notes |
-|---------|----------------|-------|
-| Dense (>500 pts) | 0.50-0.60 | ✅ Adequate features |
-| Medium (200-500 pts) | 0.40-0.50 | 🟡 Some degradation |
-| Sparse (<200 pts) | 0.25-0.40 | 🔴 Insufficient information |
-
----
-
 ## 🎯 **Strengths and Weaknesses**
 
 ### **✅ Model Strengths**
@@ -152,38 +126,6 @@ This report analyzes the performance of the 3DETR-based 3D object detection mode
 4. **Height Estimation**: Particular difficulty with Z-dimension accuracy
 5. **Fine-grained Localization**: Imprecise corner placement for complex shapes
 6. **Class Imbalance**: Bias toward larger, more common object types
-
----
-
-## 🔬 **Root Cause Analysis**
-
-### **Primary Issues**
-1. **Loss Function Design**: Current weights don't adequately address small objects
-2. **Training Data Imbalance**: Insufficient small object examples
-3. **Feature Resolution**: Limited detail for fine-grained localization
-4. **Augmentation Strategy**: Inadequate diversity in training shapes
-
-### **Secondary Issues**
-1. **Batch Size Limitations**: Small batches affect gradient quality
-2. **Learning Rate Schedule**: May not be optimal for all loss components
-3. **Architecture Constraints**: Fixed feature dimensions limit adaptability
-4. **Evaluation Metrics**: Current IoU thresholds may be too lenient
-
----
-
-## 📈 **Impact of Visualization Tools**
-
-### **Analysis Enhancement**
-- **Quantitative + Visual**: Combined metrics provide complete picture
-- **Error Pattern Recognition**: Visual patterns reveal systematic issues
-- **Debugging Efficiency**: Faster identification of problem areas
-- **Stakeholder Communication**: Clear visual evidence for improvements
-
-### **Development Workflow**
-- **Iterative Improvement**: Visual feedback enables rapid iteration
-- **Targeted Fixes**: Specific issues can be addressed systematically
-- **Progress Tracking**: Visual improvements easily monitored
-- **Quality Assurance**: Comprehensive validation of model changes
 
 ---
 
