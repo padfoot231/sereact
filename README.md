@@ -144,8 +144,7 @@ To train the model, run the script below or use the pre-written launcher:
 
 - ▶️ **Training Script:** [`train.sh`](./train.sh)
 
-### 🔍 Evaluation Scripts, exaplined in detail in [`VISUALIZATION_GUIDE`](VISUALIZATION_GUIDE.md)
-
+### 🔍 Evaluation Scripts
 - ▶️ **With Visualization:** [`eval_visualisation.sh`](./eval_visualisation.sh)  
   Runs evaluation with **point cloud visualizations** and **box distribution plots**.
 
