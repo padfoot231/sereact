@@ -261,68 +261,53 @@ Validation Results:
 
 ## 🎯 **Key Achievements**
 
-1. **✅ Novel Architecture:** Enhanced 3DDETR with RGB fusion
-2. **✅ Custom Loss Functions:** Volume-aware and aspect ratio losses
-3. **✅ Transformer-Based:** Core encoder-decoder architecture
-4. **✅ Multi-GPU Training:** Distributed training pipeline
-5. **✅ Comprehensive Pipeline:** End-to-end solution
-6. **✅ Optimization Ready:** TensorRT conversion support
-7. **✅ Under Parameter Limit:** 4.49M << 100M parameters
-8. **✅ Custom Metrics:** IoU-based evaluation system
-9. **✅ Visualization:** Point cloud and statistical plots
-10. **✅ Documentation:** Comprehensive guides and explanations
+**Novel Architecture**: Enhanced 3DDETR with RGB-PointCloud fusion
+**Custom Loss Functions**: Volume-aware and aspect ratio losses for improved detection
+**Transformer-Based**: Core encoder-decoder architecture with attention mechanisms
+**Multi-GPU Training**: Distributed training pipeline with gradient scaling
+**Complete Pipeline**: End-to-end solution from preprocessing to optimization
+**Parameter Efficiency**: 4.49M parameters (well under 100M limit)
+**Custom Evaluation**: IoU-based metrics with comprehensive analysis
+**Comprehensive Documentation**: Detailed guides and architectural explanations
 
 This submission demonstrates a complete, innovative, and well-documented 3D object detection solution that exceeds all specified requirements while introducing novel architectural improvements and loss functions.
 
-## 📋 **Detailed Requirements Checklist**
+## 📋 **Requirements Compliance**
 
-### **✅ Framework Requirements**
-- [x] **PyTorch Implementation**: Core framework with custom modules
-- [x] **Utils Libraries**:
-  - [x] `albumentations`: Data augmentation pipeline
-  - [x] `wandb`: Experiment tracking and visualization
-  - [x] `matplotlib`: Statistical plots and visualizations
-  - [x] `open3d`: Point cloud processing and visualization
-  - [x] `shapely`: IoU computation utilities
+### **Framework & Libraries**
+**Requirement**: *Preferably written in PyTorch, but other DL frameworks can also be used. Utils libs such as albumentations, kornia, ... can also be adopted.*
 
-### **✅ End-to-End Pipeline**
-- [x] **Preprocessing**: Point cloud sampling, RGB normalization, data augmentation
-- [x] **Data Loading**: Custom DataLoader with variable-size batching
-- [x] **Model Architecture**: Enhanced 3DDETR with RGB fusion
-- [x] **Training Loop**: Multi-GPU distributed training with loss scaling
-- [x] **Validation Loop**: Comprehensive evaluation with multiple metrics
-- [x] **Inference Optimization**: TensorRT conversion pipeline available
+**Implementation**: PyTorch-based with `albumentations`, `wandb`, `matplotlib`, `open3d`
 
-### **✅ Documentation & Architecture**
-- [x] **Architecture Choice Justification**: Transformer for long-range dependencies
-- [x] **Loss Function Design**: Novel volume-aware and aspect ratio losses
-- [x] **Code Documentation**: Comprehensive guides in `losses/LOSS_FUNCTIONS_GUIDE.md`
-- [x] **Diagrams**: Architecture flow and pipeline visualizations
-- [x] **Technical Reports**: Multiple detailed analysis documents
+### **End-to-End Pipeline**
+**Requirement**: *End-to-end fully functional pipeline: Preprocessing -> data loading -> model + train loop -> test loop -> Inference optimization*
 
-### **✅ Performance Metrics**
-- [x] **Custom Metrics**: IoU@0.25, IoU@0.5, Mean IoU
-- [x] **Evaluation Framework**: Custom IoUEvaluator class
-- [x] **Statistical Analysis**: Box distribution and shape diversity metrics
-- [x] **Visualization Metrics**: Point cloud and prediction overlays
+**Implementation**: Complete pipeline from point cloud preprocessing to TensorRT optimization
 
-### **✅ Model Constraints**
-- [x] **Parameter Limit**: 4.49M parameters (< 100M requirement)
-- [x] **Pretrained Models**: ResNet18 backbone for image encoding
-- [x] **Transformer Architecture**: Core encoder-decoder with attention
-- [x] **Multi-GPU Support**: DistributedDataParallel implementation
+### **Documentation**
+**Requirement**: *Brief documentation of how the candidates choose the architecture/ loss function to tackle the problem or how the code works (diagram will be nice here also)*
 
-### **✅ Training & Testing Evidence**
-- [x] **Training Logs**: Comprehensive metrics and progress tracking
-- [x] **Validation Results**: Detailed IoU metrics and performance analysis
-- [x] **Visualization Output**: Point cloud plots and box distribution analysis
-- [x] **Model Checkpoints**: Best model saved with performance metrics
+**Implementation**: Comprehensive documentation with architecture diagrams and loss function justification
 
-### **✅ Library Usage**
-- [x] **Custom Implementation**: Core model and training logic from scratch
-- [x] **Selective High-Level Usage**: Only utilities, no black-box solutions
-- [x] **Reasoning Demonstration**: Clear architectural choices and innovations
-- [x] **Coding Abilities**: Custom loss functions and training pipeline
+### **Custom Metrics**
+**Requirement**: *Candidates can choose their own metrics to measure the performance of the model*
+
+**Implementation**: IoU@0.25, IoU@0.5, Mean IoU, and statistical analysis metrics
+
+### **Model Constraints**
+**Requirement**: *Models should not exceed > 100M params and pretrained models can also be adopted. Usage of transformers architecture inside the model will also be a bonus point*
+
+**Implementation**: 4.49M parameters with transformer encoder-decoder architecture
+
+### **Training & Testing Logs**
+**Requirement**: *Showing the training and testing logs as well as output predictions visualization to verify the approach*
+
+**Implementation**: Complete training logs with point cloud visualizations and performance metrics
+
+### **Library Usage**
+**Requirement**: *Using high-level libraries like MMDetection or Ultralytics are permitted, though complete reliance on them will prevent candidates from demonstrating their own reasoning and coding abilities*
+
+**Implementation**: Custom core implementation with selective use of utility libraries
 
 ## 🔧 **Technical Implementation Details**
 
