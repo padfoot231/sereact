@@ -32,6 +32,10 @@ torch.backends.cudnn.enabled = True
 torch.backends.cudnn.benchmark = False  # Set to False for deterministic behavior
 torch.backends.cudnn.deterministic = True
 
+# Suppress DDP reducer bucket warnings for cleaner logs
+import logging
+logging.getLogger("torch.nn.parallel.distributed").setLevel(logging.WARNING)
+
 # Local imports - Core components
 from config import get_config
 from dataloader import build_loader
@@ -124,7 +128,12 @@ def main(config: Any) -> None:
     model_without_ddp = model
 
     optimizer = build_optimizer(config, model)
-    model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[config.local_rank], find_unused_parameters=False, broadcast_buffers=False)
+    model = torch.nn.parallel.DistributedDataParallel(
+        model,
+        device_ids=[config.local_rank],
+        find_unused_parameters=True,    # Fix for "Reducer buckets rebuilt" warning
+        broadcast_buffers=False
+    )
     loss_scaler = NativeScalerWithGradNormCount()
 
     if config.train.lr_scheduler == 'cosine':
@@ -288,8 +297,6 @@ def train_one_epoch(
                     'Iteration': batch_idx,
                     'train_loss': loss_meter.avg,
                     'train_miou': metric,
-                    'train_iou_at_0.25': iou_25_accuracy,
-                    'train_iou_at_0.25_percent': iou_25_accuracy * 100,
                 }
             )
     _ = iou_evaluator.compute_metrics()
@@ -397,11 +404,6 @@ def validate(
         'val_loss': loss_meter.avg,
         'val_miou': mean_iou,
     }
-
-    # Add threshold-specific metrics to wandb
-    for threshold, accuracy in threshold_accuracies.items():
-        wandb_metrics[f'val_iou_at_{threshold}'] = accuracy
-        wandb_metrics[f'val_iou_at_{threshold}_percent'] = accuracy * 100
 
     wandb.log(wandb_metrics)
 

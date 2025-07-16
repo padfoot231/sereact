@@ -1,6 +1,11 @@
 # Sereact 3D Object Detection
 
-A PyTorch implementation of 3D object detection using 3DETR (3D Detection Transformer) with RGB-PointCloud fusion. This project combines point cloud data with RGB images for enhanced 3D bounding box detection and orientation estimation.
+## 🧠 3D Object Detection with 3DETR and RGB-PointCloud Fusion
+
+A PyTorch-based implementation of 3D object detection using **3DETR (3D Detection Transformer)** with RGB–PointCloud fusion. This project combines 3D point cloud data and 2D RGB images to improve 3D bounding box prediction and orientation estimation accuracy.
+
+📄 For detailed explanation and architecture overview, see [`myLib/README.md`](SUBMISSION.md).
+
 
 ## 🚀 Features
 
@@ -11,7 +16,9 @@ A PyTorch implementation of 3D object detection using 3DETR (3D Detection Transf
 - **CUDA Extensions**: Optimized PointNet++ operations
 - **Comprehensive Loss Functions**: GIoU, angle, size, and corner losses
 
-### 📈 Experimental Results
+### 📈 Experimental Results 
+
+TODO : Add visual results
 
 | Setting              | IoU@0.25   | Mean IoU |
 |----------------------|------------|----------|
@@ -179,41 +186,6 @@ source setup_tensorrt.sh
 ```
 
 
-## 🔧 Troubleshooting
-
-### CUDA Extensions Issues
-```bash
-# If compilation fails, check CUDA installation
-nvcc --version
-export PATH=/usr/local/cuda/bin:$PATH
-export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
-
-# Clean and rebuild
-cd models/detr3d/_ext_src
-rm -rf build/
-python3 setup.py build_ext --inplace
-```
-
-### Memory Issues
-```bash
-# Reduce batch size
-data:
-  batch_size: 1
-
-# Enable memory optimizations
-export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
-```
-
-### Import Errors
-```bash
-# Ensure CUDA extensions are compiled
-cd models/detr3d/_ext_src
-python3 setup.py build_ext --inplace
-
-# Test import
-python -c "import _ext_src"
-```
-
 #### Version Compatibility Matrix
 
 | Component | Version | Notes |
@@ -323,7 +295,7 @@ python main.py \
 3. **Decoder**: Transformer decoder for object queries
 4. **Prediction Heads**: Box regression, classification, and angle prediction
 
-### Loss Functions
+### Loss Functions (losses/LOSS_FUNCTIONS_GUIDE.md)
 - **GIoU Loss**: Generalized IoU for 3D bounding boxes
 - **Box Corner Loss**: L1 loss for corner accuracy
 - **Size Loss**: L1 loss for size prediction
