@@ -71,13 +71,13 @@ A lightweight transformer encoder-decoder enables effective global reasoning ove
 
 * Focuses on small object prediction by weighting inverse box volume
 * Log-space L1 loss with clamped weights
-* Resulted in +20-30% boost for small object IoU
+* Resulted in +1-2% boost for small object IoU
 
 #### b. **Aspect Ratio Loss**
 
 * Normalizes dimensions and penalizes deviation in aspect ratios
 * Encourages shape diversity and scale-invariant supervision
-* Resulted in +15-25% improvement in shape variety
+* Resulted in +1-2% improvement in shape variety
 
 ---
 
