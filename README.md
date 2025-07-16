@@ -25,6 +25,11 @@ TODO : Add visual results
 
 <img src="point_cloud_visualisation.png" alt="Pipeline" width="600"/>
 
+<img src="validation_miou.png" alt="Pipeline" width="300"/>
+
+
+<img src="Train_loss.png" alt="Pipeline" width="300"/>
+
 | Setting              |  IoU@0.25  |  Mean IoU  |
 |----------------------|------------|------------|
 | Without Augmentation |   0.7950   | **0.4432** |
