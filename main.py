@@ -46,7 +46,6 @@ from utils.model_utils import (
     load_checkpoint,
     NativeScalerWithGradNormCount
 )
-from utils.low_precision_conversion import convert_model_to_low_precision
 
 # Initialize Wandb for experiment tracking
 wandb.init(project="sereact project", entity='padfoot')
@@ -77,10 +76,7 @@ def parse_option() -> Tuple[argparse.Namespace, Any]:
                         help='root of output folder, the full path is <output>/<model_name>/<tag> (default: output)')
     parser.add_argument('--tag', help='tag of experiment')
     parser.add_argument('--eval', action='store_true', help='Perform evaluation only')
-    parser.add_argument('--unit_test', action='store_true', help='Test throughput only')
     parser.add_argument('--base_lr', type=float , help="base learning rate")
-    parser.add_argument('--export', type=bool , help="Deploying the model")
-    parser.add_argument('--augment', type=bool , help="Data augmentation")
 
     # distributed training
     parser.add_argument("--local_rank", type=int, required=True, help='local rank for DistributedDataParallel')
@@ -106,7 +102,6 @@ def main(config: Any) -> None:
             logger.info("cuDNN initialized successfully")
         except Exception as e:
             logger.warning(f"cuDNN initialization warning: {e}")
-
     _, dataset_val, data_loader_train, data_loader_val = build_loader(config)
 
     model = build_3ddetr_model(config)
@@ -138,17 +133,6 @@ def main(config: Any) -> None:
     iou_evaluator = IoUEvaluator()
 
     max_miou = 0.0
-    if config.model.export_model:
-        # breakpoint()
-        logger.info('Start of conversion to low precision formats')
-        try:
-            convert_model_to_low_precision(config, model_without_ddp, torch.device('cuda'))
-            logger.info('Model conversion successful')
-        except ImportError:
-            logger.warning('Low precision conversion module not available. Skipping model export.')
-        except Exception as e:
-            logger.error(f'Model conversion failed: {e}')
-        return
 
     if config.model.resume:
         max_miou = load_checkpoint(config, model_without_ddp, optimizer, scheduler, loss_scaler, logger)
@@ -163,41 +147,27 @@ def main(config: Any) -> None:
         logger.info(f"Mean iou of the network on the {len(dataset_val)} test images: {miou:.4f}")
 
         # Model export to low precision formats
-    if config.model.training:
-        logger.info("Start training")
-        start_time = time.time()
-        for epoch in range(config.train.start_epoch, config.train.max_epoch):
-            data_loader_train.sampler.set_epoch(epoch)
+    logger.info("Start training")
+    start_time = time.time()
+    for epoch in range(config.train.start_epoch, config.train.max_epoch):
+        data_loader_train.sampler.set_epoch(epoch)
 
-            train_one_epoch(config, model, loss_module, iou_evaluator, data_loader_train, optimizer, epoch,scheduler,
-                            loss_scaler)
+        train_one_epoch(config, model, loss_module, iou_evaluator, data_loader_train, optimizer, epoch,scheduler,
+                        loss_scaler)
 
-            miou, loss = validate(loss_module, epoch, iou_evaluator, data_loader_val, model)
-            
-            # if dist.get_rank() == 0 and (epoch % config.save_freq == 0 or epoch == (config.train.max_epoch - 1)):
-            save_checkpoint(config, epoch, model_without_ddp, max_miou, miou, optimizer, scheduler, loss_scaler,
-                            logger)
+        miou, loss = validate(loss_module, epoch, iou_evaluator, data_loader_val, model)
+        
+        # if dist.get_rank() == 0 and (epoch % config.save_freq == 0 or epoch == (config.train.max_epoch - 1)):
+        save_checkpoint(config, epoch, model_without_ddp, max_miou, miou, optimizer, scheduler, loss_scaler,
+                        logger)
 
-            logger.info(f"Mean IOU of the network on the {len(dataset_val)} test images: {miou:.4f}%")
-            max_miou = max(max_miou, miou)
-            logger.info(f'Max miou: {max_miou:.4f}%')
+        logger.info(f"Mean IOU of the network on the {len(dataset_val)} test images: {miou:.4f}%")
+        max_miou = max(max_miou, miou)
+        logger.info(f'Max miou: {max_miou:.4f}%')
 
-        total_time = time.time() - start_time
-        total_time_str = str(datetime.timedelta(seconds=int(total_time)))
-        logger.info('Training time {}'.format(total_time_str))
-
-    if config.model.unit_test:
-        logger.info("Start training on one batch")
-        start_time = time.time()
-        for epoch in range(config.train.start_epoch, config.train.unit_test_epoch):
-            data_loader_train.sampler.set_epoch(epoch)
-
-            test_overfit_on_single_sample(config, model, loss_module, iou_evaluator, data_loader_train, optimizer, epoch,scheduler,
-                            loss_scaler)
-            
-        total_time = time.time() - start_time
-        total_time_str = str(datetime.timedelta(seconds=int(total_time)))
-        logger.info('Training time {}'.format(total_time_str))
+    total_time = time.time() - start_time
+    total_time_str = str(datetime.timedelta(seconds=int(total_time)))
+    logger.info('Training time {}'.format(total_time_str))
 
 def train_one_epoch(
     config: Any,
@@ -224,11 +194,6 @@ def train_one_epoch(
 
     for batch_idx, batch in enumerate(data_loader):
         # Move input data to GPU
-        # inputs = [obj.cuda() for obj in batch['pcd_tensor']]
-        # inputs_rgb = [obj.cuda() for obj in batch['rgb_tensor']]
-        # gt_bboxes = [obj.cuda() for obj in batch['bbox3d_tensor']]
-        # pcd_dims_min = [obj.cuda() for obj in batch['point_cloud_dims_min']]
-        # pcd_dims_max = [obj.cuda() for obj in batch['point_cloud_dims_max']]
         inputs = batch['pcd_tensor'].cuda()
         inputs_rgb = batch['rgb_tensor'].cuda()
         gt_bboxes = batch['bbox3d_tensor'].cuda()
@@ -342,32 +307,18 @@ def validate(
     logger.info('Starting validation...')
 
     for _, batch_data in enumerate(data_loader):
-
-        # Move input data to the specified device
-        # inputs = [obj.cuda() for obj in batch_data['pcd_tensor']]
-        # gt_bboxes = [obj.cuda() for obj in batch_data['bbox3d_tensor']]
-        # inputs_rgb = [obj.cuda() for obj in batch_data['rgb_tensor']]
-        # pcd_dims_min = [obj.cuda() for obj in batch_data['point_cloud_dims_min']]
-        # pcd_dims_max = [obj.cuda() for obj in batch_data['point_cloud_dims_max']]
-
         inputs = batch_data['pcd_tensor'].cuda()
         gt_bboxes = batch_data['bbox3d_tensor'].cuda()
         inputs_rgb = batch_data['rgb_tensor'].cuda()
         pcd_dims_min = batch_data['point_cloud_dims_min'].cuda()
         pcd_dims_max = batch_data['point_cloud_dims_max'].cuda()
 
-        # Forward pass
-        # inputs = {"point_clouds": batch_data["pcd"]}
         outputs = model(
             inputs,
             inputs_rgb,
             point_cloud_dims_min=pcd_dims_min,
             point_cloud_dims_max=pcd_dims_max,
         )
-
-        # Unpack the output from the list
-        # output = outputs[0]
-        # gt_bbox = gt_bboxes[0]
 
         # Get predictions
         pred_boxes = outputs['outputs']
@@ -398,107 +349,6 @@ def validate(
     )
     return metrics, loss_meter.avg
 
-def test_overfit_on_single_sample(
-    config: Any,
-    model: torch.nn.Module,
-    loss_module: LossFunction,
-    iou_evaluator: IoUEvaluator,
-    data_loader: DataLoader,
-    optimizer: torch.optim.Optimizer,
-    epoch: int,
-    lr_scheduler: Any,
-    loss_scaler: NativeScalerWithGradNormCount
-) -> Dict[str, float]:
-    """Test model's ability to overfit on a single sample for debugging."""
-    model.train()
-    optimizer.zero_grad()
-    
-    num_steps = len(data_loader)
-    batch_time = AverageMeter()
-    loss_meter = AverageMeter()
-    norm_meter = AverageMeter()
-    scaler_meter = AverageMeter()
-    
-    count = 0  # Initialize counter
-    end = time.time()
-    
-    for batch_idx, single_batch in enumerate(data_loader):
-        # Move input data to GPU (single sample only)
-        inputs = [single_batch['pcd_tensor'][0].cuda()]
-        inputs_rgb = [single_batch['rgb_tensor'][0].cuda()]  # Fixed: take first element
-        gt_bboxes = [single_batch['bbox3d_tensor'][0].cuda()]
-        pcd_dims_min = [single_batch['point_cloud_dims_min'][0].cuda()]
-        pcd_dims_max = [single_batch['point_cloud_dims_max'][0].cuda()]
-        
-        torch.autograd.set_detect_anomaly(True)
-        
-        # Fixed: correct input order
-        outputs = model(
-            inputs,      # Point clouds first
-            inputs_rgb,  # RGB second
-            point_cloud_dims_min=pcd_dims_min,
-            point_cloud_dims_max=pcd_dims_max,
-        )
-        
-        output = outputs[0]
-        gt_bbox = gt_bboxes[0]
-        
-        pred_boxes = output['outputs']
-        loss, _, assignments = loss_module(pred_boxes, gt_bbox)
-        
-        is_second_order = hasattr(optimizer, 'is_second_order') and optimizer.is_second_order
-        grad_norm = loss_scaler(loss, optimizer, clip_grad=config.train.clip_grad,
-                                parameters=model.parameters(), create_graph=is_second_order,
-                                update_grad=(batch_idx + 1) % config.train.accumulation_steps == 0)
-        
-        if (batch_idx + 1) % config.train.accumulation_steps == 0:
-            optimizer.zero_grad()
-            lr_scheduler.step()
-
-        loss_scale_value = loss_scaler.state_dict()["scale"]
-        loss_meter.update(loss.item())  # Fixed: add missing loss update
-        
-        predicted_bboxes_matched, gt_bboxes_matched = (
-            get_predicted_and_gt_boxes_from_assignments(
-                pred_boxes=pred_boxes, assignments=assignments, gt_bbox=gt_bbox
-            )
-        )
-        
-        iou_evaluator.update(predicted_bboxes_matched, gt_bboxes_matched)
-        metrics = iou_evaluator.compute_metrics()
-        
-        if metrics['mean_iou'] > 0.25:
-            print(f'Mean IoU value above 0.25: {metrics["mean_iou"]}')
-            count += 1
-        
-        torch.cuda.synchronize()
-        
-        if grad_norm is not None:
-            norm_meter.update(grad_norm)
-        scaler_meter.update(loss_scale_value)
-        batch_time.update(time.time() - end)
-        end = time.time()
-       
-        if batch_idx % config.print_freq == 0:
-            lr = optimizer.param_groups[0]['lr']
-            memory_used = torch.cuda.max_memory_allocated() / (1024.0 * 1024.0)
-            etas = batch_time.avg * (num_steps - batch_idx)
-            logger.info(
-                f'Overfit Test: [{epoch}][{batch_idx}/{num_steps}]\t'
-                f'eta {datetime.timedelta(seconds=int(etas))} lr {lr:.6f}\t'
-                f'time {batch_time.val:.4f} ({batch_time.avg:.4f})\t'
-                f'loss {loss_meter.val:.4f} ({loss_meter.avg:.4f})\t'
-                f'grad_norm {norm_meter.val:.4f} ({norm_meter.avg:.4f})\t'
-                f'loss_scale {scaler_meter.val:.4f} ({scaler_meter.avg:.4f})\t'
-                f'mem {memory_used:.0f}MB')
-    
-    # Return metrics
-    return {
-        'loss': loss_meter.avg,
-        'mean_iou': metrics['mean_iou'],
-        'samples_above_threshold': count
-    }
-
 
 def get_predicted_and_gt_boxes_from_assignments(
     pred_boxes: dict,
@@ -511,7 +361,8 @@ def get_predicted_and_gt_boxes_from_assignments(
     Args:
         pred_boxes (dict): Dict containing predicted boxes with key 'box_corners' or similar.
             Shape: [B, N_pred, 8, 3]
-        assignments (dict): Dict with 'assignments' as a list of (pred_idx, gt_idx) tuples per batch.
+        assignments (dict): Dict with 'assignments' as a list of assignment tuples per batch.
+            assignments['assignments'][b] = [pred_indices_tensor, gt_indices_tensor] or []
         gt_bbox (Tensor): Ground truth boxes [B, N_gt, 8, 3]
 
     Returns:
@@ -519,6 +370,8 @@ def get_predicted_and_gt_boxes_from_assignments(
             - predicted_bboxes_matched: List of [num_matched_i, 24] per batch
             - gt_bboxes_matched: List of [num_matched_i, 24] per batch
     """
+    import numpy as np
+
     B = gt_bbox.shape[0]
     pred_key = next((k for k in ['box_corners', 'pred_boxes', 'boxes'] if k in pred_boxes), None)
     if pred_key is None:
@@ -528,33 +381,58 @@ def get_predicted_and_gt_boxes_from_assignments(
     gt_batched = []
 
     for b in range(B):
-        pred_idx = assignments['assignments'][b][0]
-        gt_idx = assignments['assignments'][b][1]
+        # Check if there are any assignments for this batch element
+        if (b >= len(assignments['assignments']) or
+            not assignments['assignments'][b] or
+            len(assignments['assignments'][b]) == 0):
+            # No assignments for this batch element
+            predicted_batched.append(np.empty((0, 24)))
+            gt_batched.append(np.empty((0, 24)))
+            continue
+
+        # Extract assignment indices
+        assignment_pair = assignments['assignments'][b]
+        if len(assignment_pair) != 2:
+            # Invalid assignment format
+            predicted_batched.append(np.empty((0, 24)))
+            gt_batched.append(np.empty((0, 24)))
+            continue
+
+        pred_idx, gt_idx = assignment_pair[0], assignment_pair[1]
 
         pred_tensor = pred_boxes[pred_key][b]  # [N_pred, 8, 3]
         gt_tensor = gt_bbox[b]                 # [N_gt, 8, 3]
 
+        # Validate tensor shapes
+        if pred_tensor.shape[0] == 0 or gt_tensor.shape[0] == 0:
+            predicted_batched.append(np.empty((0, 24)))
+            gt_batched.append(np.empty((0, 24)))
+            continue
+
+        # Convert to CPU and validate indices
+        pred_idx_cpu = pred_idx.cpu()
+        gt_idx_cpu = gt_idx.cpu()
+
+        # Filter valid indices (within bounds)
         max_pred = pred_tensor.shape[0] - 1
         max_gt = gt_tensor.shape[0] - 1
 
-        # Filter valid indices
-        pred_idx_np = pred_idx.cpu().numpy()
-        gt_idx_np = gt_idx.cpu().numpy()
-
-        valid_pred_mask = pred_idx_np <= max_pred
-        valid_gt_mask = gt_idx_np <= max_gt
+        valid_pred_mask = (pred_idx_cpu >= 0) & (pred_idx_cpu <= max_pred)
+        valid_gt_mask = (gt_idx_cpu >= 0) & (gt_idx_cpu <= max_gt)
         valid_mask = valid_pred_mask & valid_gt_mask
 
         if valid_mask.sum() > 0:
-            pred_idx_valid = pred_idx[valid_mask]
-            gt_idx_valid = gt_idx[valid_mask]
+            pred_idx_valid = pred_idx_cpu[valid_mask]
+            gt_idx_valid = gt_idx_cpu[valid_mask]
 
+            # Extract matched boxes and reshape to [num_matches, 24]
             matched_preds = pred_tensor[pred_idx_valid].reshape(-1, 24)  # [num, 24]
             matched_gts = gt_tensor[gt_idx_valid].reshape(-1, 24)
 
             predicted_batched.append(matched_preds.detach().cpu().numpy())
             gt_batched.append(matched_gts.cpu().numpy())
         else:
+            # No valid matches
             predicted_batched.append(np.empty((0, 24)))
             gt_batched.append(np.empty((0, 24)))
 

@@ -3,7 +3,7 @@ tag: "no_augmentation"
 
 train:
   start_epoch: 0
-  max_epoch: 500
+  max_epoch: 300
   base_lr: 0.0001 # Was 0.0005
   warm_lr: 5e-6 # Increasing it to 5e-6 from 1e-6
   warm_lr_epochs: 9
@@ -16,6 +16,7 @@ train:
 data:
   batch_size: 1
   num_workers: 4
+  augment: True
 
 model:
   encoder:
@@ -39,7 +40,6 @@ model:
   num_queries: 256
   num_angular_bins: 1
   pretrained_weights_path: "/home-local2/akath.extra.nobkp/scannet_ep1080.pth"
-  export_model: False
 
 loss:
   matcher_costs:

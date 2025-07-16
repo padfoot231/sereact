@@ -53,10 +53,7 @@ _C.data.augment = False                                                 # Enable
 _C.model = CN()
 
 # Core Model Settings
-_C.model.name = '3DDETR'                                                # Model name for 3D detection
-_C.model.training = True                                                # Enable training mode
-_C.model.unit_test = False                                              # Run unit testing mode
-_C.model.export_model = False                                           # Export model to low precision formats
+_C.model.name = '3DDETR'                                                # Model name for 3D detection                                                          # Export model to low precision formats
 
 # 3DETR Architecture Parameters
 _C.model.position_embedding = 'fourier'                                 # Position embedding type: 'fourier', 'sine'
@@ -199,12 +196,8 @@ def update_config(config: CN, args: argparse.Namespace) -> None:
         config.data.batch_size = args.batch_size
     if args.data_path:
         config.data.data_path = args.data_path
-    if args.augment:
-        config.data.augment = args.augment
     if args.pretrained:
         config.model.pretrained = args.pretrained
-    if args.export: 
-        config.model.export_model = args.export
     if args.resume:
         config.model.resume = args.resume
     if args.accumulation_steps:
@@ -221,8 +214,6 @@ def update_config(config: CN, args: argparse.Namespace) -> None:
         config.tag = args.tag
     if args.eval:
         config.eval_mode = True
-    if args.unit_test:
-        config.unit_test = True
 
     # Set distributed training configuration
     config.local_rank = args.local_rank

@@ -20,9 +20,8 @@ python -m torch.distributed.launch \
 --nproc_per_node 3 \
 --master_port 12346  main.py \
 --cfg config/base_train.yaml \
---output /home-local2/akath.extra.nobkp/sereact \
+--output /home-local2/akath.extra.nobkp/sereact_dataaug \
 --data-path /home-local2/akath.extra.nobkp/dl_challenge \
---tag "no_augmentation" \
---augment True \
+--tag "augmentation" \
 --batch-size 2
 # --pretrained /home-local2/akath.extra.nobkp/scannet_ep1080.pth

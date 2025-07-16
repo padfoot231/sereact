@@ -103,6 +103,7 @@ def build_dataset(is_train: bool, config: Any) -> Dataset:
         if config.data.augment:
             transform = SereactAugmentation() if is_train else None
         else:
+            print("No Augmentation")
             transform = None
                     
         task = 'train' if is_train else 'test'
