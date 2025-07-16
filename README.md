@@ -21,9 +21,10 @@ A PyTorch-based implementation of 3D object detection using **3DETR (3D Detectio
 TODO : Analysis of visual results
 
 <p align="center">
-  <img src="box_distributions.png" alt="Box Distributions" width="45%" />
-  <img src="point_cloud_visualisation.png" alt="3D Point Cloud" width="45%" />
+  <img src="box_distributions.png" alt="Box Distributions" width="51%"/>
+  <img src="point_cloud_visualisation.png" alt="3D Point Cloud" width="47%"/>
 </p>
+
 <p align="center">
   <img src="validation_miou.png" alt="Validation mIoU" width="45%" />
   <img src="Train_loss.png" alt="Train Loss" width="45%" />
